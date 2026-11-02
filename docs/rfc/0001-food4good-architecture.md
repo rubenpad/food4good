@@ -20,7 +20,7 @@ One Spring Boot application with two clean-architecture modules (`kitchen` and `
 | Observability | OpenTelemetry via Spring Boot's OTel support → OTLP → Honeycomb |
 | Frontend | Node 26 LTS, npm, Vue 3, Vite, TypeScript, PrimeVue 4.5.5 (styled, Aura), Pinia Colada; oxlint + oxfmt |
 | Market stub | WireMock with a response template |
-| Local runtime | Docker Compose |
+| Local runtime | Docker Compose, with an nginx gateway as the entry point |
 | Tests | JUnit 5, Testcontainers (PostgreSQL, WireMock), ArchUnit |
 | Load test | k6 |
 
@@ -28,8 +28,10 @@ One Spring Boot application with two clean-architecture modules (`kitchen` and `
 
 ```mermaid
 flowchart LR
-  UI[Vue dashboard] -- REST --> API
-  API -- SSE --> UI
+  UI[Vue dashboard] -- REST --> GW[nginx gateway]
+  GW -- SSE --> UI
+  GW --> API
+  GW --> FE[frontend container]
   subgraph App[Spring Boot app]
     API[web adapter]
     K[kitchen module]
@@ -356,7 +358,8 @@ Two checks sit outside that seam:
 backend/            Gradle project (modules = Java packages, verified by ArchUnit)
 frontend/           Vue + Vite app
 infra/
-  docker-compose.yml   postgres, wiremock, backend, frontend
+  docker-compose.yml   postgres, wiremock, backend, frontend, gateway
+  nginx.conf           gateway routes: /api/ to the backend, everything else to the frontend
   wiremock/mappings/   buy.json — quantitySold {{randomInt lower=0 upper=10}}, uniform delay 0–3 s
 load-tests/         k6 scripts
 docs/  prd.md · rfc/ · adr/
