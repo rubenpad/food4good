@@ -275,9 +275,11 @@ All endpoints are under `/api`. JSON uses camelCase. The OpenAPI document is gen
 | `GET /storage` | `[{ingredient, onHand, reserved, available}]` |
 | `GET /purchases?cursor=&limit=` | Purchase history, newest first |
 | `GET /recipes` | Recipes with id, Ingredients, quantities and preparation times, ordered by name |
-| `POST /recipes` | Creates a Recipe. `400` if invalid, `409` if the name is taken. |
+| `POST /recipes` | Creates a Recipe: `201` with its location. `400` if invalid, `409` if the name is taken. |
 | `PUT /recipes/{id}` | Replaces a Recipe's name, Ingredients and preparation time. `400`, `404`, `409`. |
 | `GET /events` | SSE stream (§7) |
+
+Errors are RFC 9457 problem details, with the message for the Manager in `detail`.
 
 `estimatedCapacity` = ⌊(maxWait × cooks − backlogWork) ÷ avgPrep⌋, never below 0 (PRD FR-2).
 
