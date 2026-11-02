@@ -72,11 +72,13 @@ com.food4good.<module>
 
 Cross-module calls are **synchronous and run inside the caller's transaction**. All modules share one database, so calling another module's port inside our transaction is atomic and needs no outbox. Asynchrony exists only where real waiting happens: the stock single writer, market calls and cooking time. Each has its own durable queue.
 
+`domain` is plain Java, so services get their transactions through `TransactionPort` in `shared`.
+
 | Inbound port | Offered by | Used by | Effect |
 |---|---|---|---|
-| `IngredientRequests.request(orderId, recipe)` | storage | kitchen | Records the Reservation lines and enqueues a `RESERVE` storage command |
-| `IngredientRequests.consume(orderId)` | storage | kitchen | Enqueues a `CONSUME` storage command |
-| `OrderReadiness.markReady(orderId)` | kitchen | storage | Order → **ready** (called when a Reservation completes) |
+| `RequestIngredientsUseCase.request(requests)` | storage | kitchen | Records the Reservation lines and enqueues `RESERVE` storage commands |
+| `ConsumeReservationUseCase.consume(orderId)` | storage | kitchen | Enqueues a `CONSUME` storage command |
+| `MarkOrderReadyUseCase.markReady(orderId)` | kitchen | storage | Order → **ready** (called when a Reservation completes) |
 
 ## 4. Data model
 
@@ -107,7 +109,7 @@ CREATE TABLE orders (
   id             uuid PRIMARY KEY,
   recipe_id      uuid        NOT NULL REFERENCES recipe(id),
   recipe_name    text        NOT NULL,          -- as accepted; a later edit does not change it
-  prep_ms        int         NOT NULL,          -- scaled preparation time, frozen at acceptance
+  preparation_ms bigint      NOT NULL,          -- scaled preparation time, frozen at acceptance
   status         text        NOT NULL CHECK (status IN ('WAITING_FOR_INGREDIENTS','READY','PREPARING','DELIVERED')),
   accepted_at    timestamptz NOT NULL,
   ready_at       timestamptz,
@@ -170,7 +172,7 @@ CREATE TABLE market_job (
 CREATE INDEX market_job_due_idx ON market_job (next_attempt_at) WHERE status = 'PENDING';
 ```
 
-Recipes live in their own tables, and the starting six are inserted once by a migration (PRD §6). Editing a Recipe never touches accepted Orders: `orders` keeps the Recipe's id and name, `prep_ms` freezes the scaled preparation time, and `reservation_line` holds the quantities (PRD FR-8.3). Cooks and the Maximum wait are configuration (PRD §7).
+Recipes live in their own tables, and the starting six are inserted once by a migration (PRD §6). Starting stock is also inserted once by a migration, from `FOOD4GOOD_STORAGE_INITIAL_STOCK`, so a restart never refills Food Storage. Editing a Recipe never touches accepted Orders: `orders` keeps the Recipe's id and name, `preparation_ms` freezes the scaled preparation time, and `reservation_line` holds the quantities (PRD FR-8.3). Cooks and the Maximum wait are configuration (PRD §7).
 
 ## 5. Flows
 
@@ -195,7 +197,7 @@ sequenceDiagram
 **Admission is serialized** by a transaction-scoped advisory lock. Two concurrent requests must not both see the same free capacity. The backlog work is
 
 ```
-Σ prep_ms                          over WAITING_FOR_INGREDIENTS and READY
+Σ preparation_ms                          over WAITING_FOR_INGREDIENTS and READY
 + Σ greatest(prepare_until − now, 0) over PREPARING
 ```
 
@@ -246,7 +248,7 @@ sequenceDiagram
 One kitchen scheduler loop, holding `pg_try_advisory_lock(KITCHEN)`, wakes on `NOTIFY kitchen` (when an Order becomes ready), on the earliest `prepare_until`, or after a 1 s fallback poll. Each tick has two steps:
 
 1. **Deliver.** `UPDATE orders SET status='DELIVERED', delivered_at=now() WHERE status='PREPARING' AND prepare_until <= now()`.
-2. **Start.** `free = cooks − count(PREPARING)`. Claim up to `free` READY Orders `ORDER BY ready_at FOR UPDATE SKIP LOCKED`. Set them `PREPARING`, `preparing_at=now()`, `prepare_until=now()+prep_ms`, and call `IngredientRequests.consume(orderId)` in the same transaction.
+2. **Start.** `free = cooks − count(PREPARING)`. Claim up to `free` READY Orders `ORDER BY ready_at FOR UPDATE SKIP LOCKED`. Set them `PREPARING`, `preparing_at=now()`, `prepare_until=now()+preparation_ms`, and call `IngredientRequests.consume(orderId)` in the same transaction.
 
 No thread sleeps through a preparation and no transaction stays open. Because `prepare_until` is stored, a restart resumes cooking exactly where it stopped (NFR-2).
 
@@ -271,7 +273,7 @@ All endpoints are under `/api`. JSON uses camelCase. The OpenAPI document is gen
 | Method & path | Purpose |
 |---|---|
 | `POST /orders` `{quantity}` | → `200 {requested, accepted, orderIds[], estimatedWaitSeconds}`. `400` if quantity < 1 or > 10,000. Accepting 0 is still `200`. |
-| `GET /orders?status=&cursor=&limit=` | Order history, newest first, keyset-paginated on `(accepted_at, id)` |
+| `GET /orders?status=&cursor=&limit=` | Order history, newest first, keyset-paginated on `(accepted_at, id)`: `{items, nextCursor}`. `limit` is 1–200, default 50. `nextCursor` is null on the last page. |
 | `GET /kitchen` | `{cooks, busyCooks, maxWaitSeconds, backlogSeconds, estimatedCapacity}` |
 | `GET /storage` | `[{ingredient, onHand, reserved, available}]` |
 | `GET /purchases?cursor=&limit=` | Purchase history, newest first |

@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import OrderHistoryPanel from "./orders/OrderHistoryPanel.vue";
+import PlaceOrdersPanel from "./orders/PlaceOrdersPanel.vue";
 import RecipesPanel from "./recipes/RecipesPanel.vue";
+import StoragePanel from "./storage/StoragePanel.vue";
 </script>
 
 <template>
@@ -8,6 +11,9 @@ import RecipesPanel from "./recipes/RecipesPanel.vue";
     <p>Donation event dashboard</p>
   </header>
   <main class="dashboard">
+    <PlaceOrdersPanel />
+    <OrderHistoryPanel />
+    <StoragePanel />
     <RecipesPanel />
   </main>
 </template>

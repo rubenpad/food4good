@@ -1,6 +1,7 @@
 package com.food4good.kitchen.infrastructure.adapters.in.rest;
 
 import com.food4good.kitchen.domain.model.DuplicateRecipeNameException;
+import com.food4good.kitchen.domain.model.InvalidOrderRequestException;
 import com.food4good.kitchen.domain.model.InvalidRecipeException;
 import com.food4good.kitchen.domain.model.RecipeNotFoundException;
 import org.springframework.http.HttpHeaders;
@@ -14,12 +15,17 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
-/** Reports Recipe errors as RFC 9457 problem details, with the message for the Manager in {@code detail}. */
-@RestControllerAdvice(assignableTypes = RecipeController.class)
-class RecipeExceptionHandler extends ResponseEntityExceptionHandler {
+/** Reports the Kitchen's errors as RFC 9457 problem details, with the message for the Manager in {@code detail}. */
+@RestControllerAdvice(assignableTypes = {RecipeController.class, OrderController.class})
+class KitchenExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(InvalidRecipeException.class)
     ProblemDetail invalid(InvalidRecipeException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+
+    @ExceptionHandler(InvalidOrderRequestException.class)
+    ProblemDetail invalidOrderRequest(InvalidOrderRequestException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
     }
 
@@ -37,7 +43,7 @@ class RecipeExceptionHandler extends ResponseEntityExceptionHandler {
     protected ResponseEntity<Object> handleHttpMessageNotReadable(
             HttpMessageNotReadableException e, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         var problem = ProblemDetail.forStatusAndDetail(
-                status, "The request body must be valid JSON, with whole numbers for quantities and preparation time");
+                status, "The request body must be valid JSON, with whole numbers for quantities and times");
         return handleExceptionInternal(e, problem, headers, status, request);
     }
 }

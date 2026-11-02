@@ -21,54 +21,56 @@ function openDialog(recipe: Recipe | null) {
 </script>
 
 <template>
-  <Card>
-    <template #title>
-      <div class="title">
-        <span>Recipes</span>
-        <Button label="New Recipe" size="small" @click="openDialog(null)" />
-      </div>
-    </template>
-    <template #content>
-      <Message v-if="error" severity="error">Could not load Recipes: {{ error.message }}</Message>
-      <DataTable
-        v-else
-        :value="recipes ?? []"
-        :loading="isPending"
-        data-key="id"
-        size="small"
-        scrollable
-      >
-        <Column field="name" header="Recipe" />
-        <Column header="Ingredients">
-          <template #body="{ data }">
-            <div class="ingredients">
-              <Tag
-                v-for="item in data.ingredients"
-                :key="item.ingredient"
+  <section aria-label="Recipes">
+    <Card>
+      <template #title>
+        <div class="title">
+          <span>Recipes</span>
+          <Button label="New Recipe" size="small" @click="openDialog(null)" />
+        </div>
+      </template>
+      <template #content>
+        <Message v-if="error" severity="error">Could not load Recipes: {{ error.message }}</Message>
+        <DataTable
+          v-else
+          :value="recipes ?? []"
+          :loading="isPending"
+          data-key="id"
+          size="small"
+          scrollable
+        >
+          <Column field="name" header="Recipe" />
+          <Column header="Ingredients">
+            <template #body="{ data }">
+              <div class="ingredients">
+                <Tag
+                  v-for="item in data.ingredients"
+                  :key="item.ingredient"
+                  severity="secondary"
+                  :value="`${item.ingredient} × ${item.quantity}`"
+                />
+              </div>
+            </template>
+          </Column>
+          <Column header="Preparation time">
+            <template #body="{ data }">{{ formatDuration(data.preparationTimeSeconds) }}</template>
+          </Column>
+          <Column header="">
+            <template #body="{ data }">
+              <Button
+                label="Edit"
+                size="small"
                 severity="secondary"
-                :value="`${item.ingredient} × ${item.quantity}`"
+                text
+                :aria-label="`Edit ${data.name}`"
+                @click="openDialog(data)"
               />
-            </div>
-          </template>
-        </Column>
-        <Column header="Preparation time">
-          <template #body="{ data }">{{ formatDuration(data.preparationTimeSeconds) }}</template>
-        </Column>
-        <Column header="">
-          <template #body="{ data }">
-            <Button
-              label="Edit"
-              size="small"
-              severity="secondary"
-              text
-              :aria-label="`Edit ${data.name}`"
-              @click="openDialog(data)"
-            />
-          </template>
-        </Column>
-      </DataTable>
-    </template>
-  </Card>
+            </template>
+          </Column>
+        </DataTable>
+      </template>
+    </Card>
+  </section>
   <RecipeDialog v-model:visible="dialogVisible" :recipe="editing" />
 </template>
 
