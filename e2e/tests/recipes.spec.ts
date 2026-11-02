@@ -1,7 +1,8 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 const uniqueName = () => `Recipe ${crypto.randomUUID()}`;
-const recipeRow = (page: Page, name: string) => page.locator("tbody tr", { hasText: name });
+const recipeRow = (page: Page, name: string) =>
+  page.getByRole("region", { name: "Recipes" }).locator("tbody tr", { hasText: name });
 const nameInput = (page: Page) => page.getByRole("dialog").getByLabel("Name");
 const preparationInput = (page: Page) => page.getByRole("dialog").getByLabel("Preparation time");
 const save = (page: Page) => page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
