@@ -21,7 +21,8 @@ Demand comes in bursts: a queue of people arrives and the Manager places many Or
 - Authentication, roles or multiple Managers with different permissions.
 - Multiple donation events. There is one implicit, ongoing event, and stock resets only with a fresh database.
 - Choosing the Dish, or Recipe choice that takes stock into account. Selection is uniformly random.
-- Editing Recipes, Cooks or the Maximum wait from the UI. They are configuration, shown read-only.
+- Editing Cooks or the Maximum wait from the UI. They are configuration, shown read-only.
+- Deleting Recipes.
 - Cancelling an Order.
 - Reconciling Farmers Market sales after a timeout. The market is not idempotent, and a timed-out call is treated as selling nothing.
 - Cloud deployment, Kubernetes, multiple app instances, a message broker, an OpenTelemetry Collector, Grafana, browser telemetry.
@@ -37,7 +38,7 @@ Demand comes in bursts: a queue of people arrives and the Manager places many Or
 The Manager enters a quantity (default 1) and places Orders.
 
 - **FR-1.1** Each accepted unit of quantity creates exactly one Order.
-- **FR-1.2** On acceptance, each Order is immediately assigned a Recipe chosen uniformly at random from the six Recipes.
+- **FR-1.2** On acceptance, each Order is immediately assigned a Recipe chosen uniformly at random from the current Recipes.
 - **FR-1.3 Admission.** Orders are admitted one by one. Admission stops as soon as the next Order would push the Backlog past the Maximum wait (FR-3). The remaining quantity is rejected and no Orders are created for it.
 - **FR-1.4** The response states how many Orders were requested, how many were accepted, the identifiers of the accepted Orders, and the estimated time to clear the Backlog.
 - **FR-1.5** Quantity must be a positive whole number. A technical ceiling (10,000) protects the server. It is not a business limit.
@@ -89,14 +90,27 @@ A single page with these panels. The spec's required UI elements are noted in br
 | **Kitchen** [orders in preparation] | Orders waiting for ingredients, ready and preparing, with Recipe and status; Cooks busy/total; current Backlog |
 | **Food Storage** [stock + Purchase history] | Per Ingredient: on hand, reserved, available. Purchase history: Ingredient, units, time |
 | **Order history** [orders placed] | Every Order with Recipe, status and timestamps, newest first, paginated |
-| **Recipes** [recipes with ingredients] | Each Recipe with its Ingredients, quantities and preparation time; Cooks and Maximum wait |
+| **Recipes** [recipes with ingredients] | Each Recipe with its Ingredients, quantities and preparation time; forms to create and edit Recipes (FR-8); Cooks and Maximum wait |
 
 - **FR-7.1** Status, stock and Purchase changes appear within about a second without a page refresh.
 - **FR-7.2** After a lost connection, the dashboard reconnects and catches up automatically.
 
-## 6. Recipes (proposed, configurable)
+### FR-8 Manage Recipes
 
-Six Recipes using only the ten Ingredients, each Ingredient at least once. Preparation times are kept short so the Backlog moves visibly in a demo.
+The Manager can create and edit Recipes while the event runs.
+
+- **FR-8.1** A Recipe has a unique name, at least one Ingredient from the ten, a positive whole quantity of each, and a positive preparation time.
+- **FR-8.2** Invalid input is refused with a clear error, and a duplicate name is reported as a conflict.
+- **FR-8.3** An edit affects only Orders accepted afterwards. An accepted Order keeps the Recipe name, Ingredients, quantities and preparation time it was accepted with, including in the Order history and the Backlog.
+- **FR-8.4** New and edited Recipes join the random draw for the next Order, and the capacity estimate (FR-2) uses the new average preparation time.
+
+_Acceptance:_
+- Given an Order waiting for ingredients, when its Recipe is edited to need more units, then that Order's Reservation and preparation time do not change.
+- Given a Recipe named "Tomato Rice", when the Manager creates another with that name, then it is refused and nothing changes.
+
+## 6. Starting Recipes
+
+The event starts with these six Recipes, inserted once and editable afterwards (FR-8). Together they use every Ingredient. Preparation times are kept short so the Backlog moves visibly in a demo.
 
 | Recipe | Ingredients | Preparation time |
 |---|---|---|
@@ -107,7 +121,7 @@ Six Recipes using only the ten Ingredients, each Ingredient at least once. Prepa
 | Tomato Rice | rice 2, tomato 2, onion 1 | 60 s |
 | Fries with Ketchup | potato 2, ketchup 1 | 30 s |
 
-Coverage: tomato, lemon, potato, rice, ketchup, lettuce, onion, cheese, meat and chicken each appear in at least one Recipe. Average preparation time is 105 s.
+Average preparation time is 105 s.
 
 ## 7. Configuration
 
@@ -116,8 +130,7 @@ All values come from environment variables at startup and are shown read-only in
 | Setting | Default | Notes |
 |---|---|---|
 | Cooks | 4 | |
-| Maximum wait | 2 h | About 270 Orders of capacity with the defaults |
-| Recipes | §6 | Including preparation times |
+| Maximum wait | 2 h | About 270 Orders of capacity with the starting Recipes |
 | Preparation time scale | 1.0 | e.g. 0.01 for load tests, so 1,000 Orders finish in minutes |
 | Initial stock per Ingredient | 5 | |
 | Farmers Market URL | local stub | |

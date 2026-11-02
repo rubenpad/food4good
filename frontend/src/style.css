@@ -1,0 +1,16 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  background: var(--p-surface-50);
+  color: var(--p-text-color);
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: var(--p-surface-950);
+  }
+}

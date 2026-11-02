@@ -32,7 +32,7 @@ _Avoid_: Timeout, SLA
 Receives Orders, assigns each a Recipe at random, obtains its ingredients from Food Storage, and has a Cook prepare and deliver the Dish.
 
 **Recipe**:
-One of a fixed set of six preparations: the Ingredients it needs, the quantity of each, and its preparation time. Every Ingredient appears in at least one Recipe.
+A preparation the Kitchen can make: the Ingredients it needs, the quantity of each, and its preparation time. The Manager can create and edit Recipes; an edit affects only Orders accepted afterwards.
 _Avoid_: Menu item, dish (a Dish is an instance; a Recipe is the template)
 
 **Cook**:

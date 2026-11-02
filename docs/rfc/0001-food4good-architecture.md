@@ -1,80 +1,100 @@
 # RFC 0001 — food4good architecture
 
-**Status:** Draft · **Date:** 2026-11-01 · **Requirements:** [PRD](../prd.md) · **Vocabulary:** [GLOSSARY.md](../../GLOSSARY.md) · **Decisions:** [ADR-0001](../adr/0001-single-writer-for-stock.md), [ADR-0002](../adr/0002-postgres-only-no-broker.md), [ADR-0003](../adr/0003-jdbcclient-and-flyway-over-jpa.md)
+**Status:** Draft · **Date:** 2026-11-01 · **Requirements:** [PRD](../prd.md) · **Vocabulary:** [GLOSSARY.md](../../GLOSSARY.md) · **Decisions:** [ADR-0001](../adr/0001-single-writer-for-stock.md), [ADR-0002](../adr/0002-postgres-only-no-broker.md), [ADR-0003](../adr/0003-jdbcclient-and-flyway-over-jpa.md), [ADR-0004](../adr/0004-clean-architecture-without-spring-modulith.md)
 
 ## 1. Summary
 
-One Spring Boot application with three hexagonal modules (`kitchen`, `storage` and `market`) over a single PostgreSQL database. PostgreSQL is both the system of record and the work queue. Taking Orders is synchronous and cheap. Everything after that (reserving, buying, cooking) is done by background workers that claim rows with `FOR UPDATE SKIP LOCKED`. Stock is changed by exactly one writer. A Vue dashboard receives live updates over SSE. Traces go to Honeycomb over OTLP.
+One Spring Boot application with two clean-architecture modules (`kitchen` and `storage`) and a `shared` module over a single PostgreSQL database. PostgreSQL is both the system of record and the work queue. Taking Orders is synchronous and cheap. Everything after that (reserving, buying, cooking) is done by background workers that claim rows with `FOR UPDATE SKIP LOCKED`. Stock is changed by exactly one writer. A Vue dashboard receives live updates over SSE. Traces go to Honeycomb over OTLP.
 
 ## 2. Stack
 
 | Concern | Choice |
 |---|---|
 | Language / runtime | Java 25, virtual threads on |
-| Framework | Spring Boot 4.x, Spring Modulith (boundary verification only) |
+| Framework | Spring Boot 4.x |
 | Build | Gradle, Kotlin DSL |
 | Database | PostgreSQL 17 |
 | Persistence | Spring `JdbcClient`, hand-written SQL; Flyway migrations |
 | Farmers Market client | `@HttpExchange` interface on `RestClient`, JDK `HttpClient` underneath |
 | Live updates | Server-Sent Events (`SseEmitter`) |
 | Observability | OpenTelemetry via Spring Boot's OTel support → OTLP → Honeycomb |
-| Frontend | Vue 3, Vite, TypeScript, PrimeVue (styled, Aura), Pinia Colada; oxlint + oxfmt |
+| Frontend | Node 26 LTS, npm, Vue 3, Vite, TypeScript, PrimeVue 4.5.5 (styled, Aura), Pinia Colada; oxlint + oxfmt |
 | Market stub | WireMock with a response template |
-| Local runtime | Docker Compose |
-| Tests | JUnit 5, Testcontainers (PostgreSQL, WireMock), Spring Modulith `ApplicationModules.verify()` |
+| Local runtime | Docker Compose, with an nginx gateway as the entry point |
+| Tests | JUnit 5, Testcontainers (PostgreSQL, WireMock), ArchUnit |
 | Load test | k6 |
 
 ## 3. Architecture overview
 
 ```mermaid
 flowchart LR
-  UI[Vue dashboard] -- REST --> API
-  API -- SSE --> UI
+  UI[Vue dashboard] -- REST --> GW[nginx gateway]
+  GW -- SSE --> UI
+  GW --> API
+  GW --> FE[frontend container]
   subgraph App[Spring Boot app]
     API[web adapter]
     K[kitchen module]
     S[storage module]
-    M[market module]
     API --> K
-    K -- StoragePort --> S
-    S -- KitchenPort --> K
-    S -- FarmersMarketPort --> M
+    K -- inbound port --> S
+    S -- inbound port --> K
   end
-  K & S & M --> DB[(PostgreSQL)]
-  M -- HTTP --> FM[Farmers Market / WireMock]
+  K & S --> DB[(PostgreSQL)]
+  S -- HTTP --> FM[Farmers Market / WireMock]
   App -. OTLP .-> HC[Honeycomb]
 ```
 
 ### 3.1 Modules and layering
 
-Each module is hexagonal:
+Every module has the same layout ([ADR-0004](../adr/0004-clean-architecture-without-spring-modulith.md)):
 
 ```
 com.food4good.<module>
-├── domain/        entities, value objects, invariants — plain Java, no Spring
-├── application/   use cases; inbound ports (interfaces the module offers)
-│   └── port/out/  outbound ports (what the module needs)
-└── adapter/
-    ├── in/        web controllers, workers (schedulers)
-    └── out/       JDBC repositories, HTTP client
+├── domain                   plain Java, no Spring
+│   ├── model                entities, value objects, invariants
+│   ├── ports
+│   │   ├── in               use cases the module offers (ListRecipesUseCase)
+│   │   └── out              what the module needs (RecipeRepositoryPort)
+│   └── service              use case implementations (ListRecipesService)
+└── infrastructure
+    ├── adapters
+    │   ├── in/rest          controllers and DTOs
+    │   ├── in/worker        background workers
+    │   └── out/persistence  JDBC repositories (out/market: Farmers Market client)
+    └── configuration        bean wiring, properties
 ```
 
-**Cross-module rule.** Modules call each other only through the other module's published inbound port, never through its domain or adapters. Spring Modulith's `verify()` test enforces this.
+`com.food4good.shared` holds what every module uses, such as `Ingredient`, in the same layout.
+
+**Cross-module rule.** Modules call each other only through the other module's `domain/ports/in` or through `shared`. An ArchUnit test enforces this, and that `domain` stays free of Spring and of `infrastructure`.
 
 Cross-module calls are **synchronous and run inside the caller's transaction**. All modules share one database, so calling another module's port inside our transaction is atomic and needs no outbox. Asynchrony exists only where real waiting happens: the stock single writer, market calls and cooking time. Each has its own durable queue.
 
-| Port | Offered by | Used by | Effect |
+| Inbound port | Offered by | Used by | Effect |
 |---|---|---|---|
 | `IngredientRequests.request(orderId, recipe)` | storage | kitchen | Records the Reservation lines and enqueues a `RESERVE` storage command |
 | `IngredientRequests.consume(orderId)` | storage | kitchen | Enqueues a `CONSUME` storage command |
 | `OrderReadiness.markReady(orderId)` | kitchen | storage | Order → **ready** (called when a Reservation completes) |
-| `FarmersMarket.buy(ingredient)` | market | storage (buyer worker) | One HTTP call; returns units sold (0 on any failure) |
 
 ## 4. Data model
 
 PostgreSQL enforces the stock invariants (PRD NFR-3), not just the application code.
 
 ```sql
+CREATE TABLE recipe (
+  id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name                     text NOT NULL UNIQUE CHECK (btrim(name) <> ''),
+  preparation_time_seconds int  NOT NULL CHECK (preparation_time_seconds > 0)
+);
+
+CREATE TABLE recipe_ingredient (
+  recipe_id  uuid NOT NULL REFERENCES recipe (id) ON DELETE CASCADE,
+  ingredient text NOT NULL CHECK (ingredient IN ('tomato', 'lemon', '...')),
+  quantity   int  NOT NULL CHECK (quantity > 0),
+  PRIMARY KEY (recipe_id, ingredient)
+);
+
 CREATE TABLE ingredient_stock (
   ingredient  text PRIMARY KEY,
   on_hand     int  NOT NULL CHECK (on_hand  >= 0),
@@ -84,7 +104,8 @@ CREATE TABLE ingredient_stock (
 
 CREATE TABLE orders (
   id             uuid PRIMARY KEY,
-  recipe         text        NOT NULL,
+  recipe_id      uuid        NOT NULL REFERENCES recipe(id),
+  recipe_name    text        NOT NULL,          -- as accepted; a later edit does not change it
   prep_ms        int         NOT NULL,          -- scaled preparation time, frozen at acceptance
   status         text        NOT NULL CHECK (status IN ('WAITING_FOR_INGREDIENTS','READY','PREPARING','DELIVERED')),
   accepted_at    timestamptz NOT NULL,
@@ -148,7 +169,7 @@ CREATE TABLE market_job (
 CREATE INDEX market_job_due_idx ON market_job (next_attempt_at) WHERE status = 'PENDING';
 ```
 
-Recipes, Cooks and the Maximum wait are configuration (PRD §7), not tables. `orders.recipe` stores the Recipe name, and `prep_ms` freezes the scaled preparation time, so a configuration change never rewrites the Backlog of Orders already accepted.
+Recipes live in their own tables, and the starting six are inserted once by a migration (PRD §6). Editing a Recipe never touches accepted Orders: `orders` keeps the Recipe's id and name, `prep_ms` freezes the scaled preparation time, and `reservation_line` holds the quantities (PRD FR-8.3). Cooks and the Maximum wait are configuration (PRD §7).
 
 ## 5. Flows
 
@@ -215,6 +236,7 @@ sequenceDiagram
 - **Concurrency.** A semaphore of `MAX_CONCURRENT_MARKET_CALLS` (20) limits in-flight calls. Each call runs on its own virtual thread.
 - **No connection or lock is held during the HTTP call.** The job is claimed and committed first, then the call is made, then the result is written in a second transaction.
 - **Crash recovery.** A job left `IN_FLIGHT` past `lease_until` is reclaimed by the next claim query. The sale from the lost call may have happened, which is the accepted gap in the PRD (§3).
+- **Client.** `FarmersMarketPort.buy(ingredient)` is an outbound port of Food Storage. It makes one HTTP call and returns the units sold, 0 on any failure.
 - **Backoff.** `min(250 ms × 2^(zero_streak−1), 5 s)` with ±20 % jitter. A sale resets it.
 - One call is one attempt, because the market accepts no quantity.
 
@@ -252,7 +274,9 @@ All endpoints are under `/api`. JSON uses camelCase. The OpenAPI document is gen
 | `GET /kitchen` | `{cooks, busyCooks, maxWaitSeconds, backlogSeconds, estimatedCapacity}` |
 | `GET /storage` | `[{ingredient, onHand, reserved, available}]` |
 | `GET /purchases?cursor=&limit=` | Purchase history, newest first |
-| `GET /recipes` | Recipes with Ingredients, quantities and preparation times |
+| `GET /recipes` | Recipes with id, Ingredients, quantities and preparation times, ordered by name |
+| `POST /recipes` | Creates a Recipe. `400` if invalid, `409` if the name is taken. |
+| `PUT /recipes/{id}` | Replaces a Recipe's name, Ingredients and preparation time. `400`, `404`, `409`. |
 | `GET /events` | SSE stream (§7) |
 
 `estimatedCapacity` = ⌊(maxWait × cooks − backlogWork) ÷ avgPrep⌋, never below 0 (PRD FR-2).
@@ -280,6 +304,7 @@ Each batch carries a monotonic `id`. A client that reconnects refetches all quer
 - **Server state** lives in Pinia Colada: one query per endpoint, with keys `['orders', filters]`, `['storage']`, `['purchases']`, `['kitchen']` and `['recipes']`. `PlaceOrders` is a mutation.
 - **`useLiveEvents()`** opens a single `EventSource`, patches the cache with `queryCache.setQueryData` per batch, and invalidates every query on `open` after a reconnect.
 - **Tooling:** oxlint and oxfmt, and `vue-tsc` for type checking.
+- **PrimeVue stays on 4.5.5 with `@primeuix/themes` 2.0.3, pinned exactly.** These are the last MIT releases. PrimeVue 5 and themes 3 use the commercial PrimeUI license and need a license key, so do not upgrade without a licensing decision.
 
 ## 9. Observability
 
@@ -309,7 +334,7 @@ Each batch carries a monotonic `id`. A client that reconnects refetches all quer
 
 | Control | How |
 |---|---|
-| Random Recipe choice | Configure a single Recipe, or Recipes with known Ingredients, so the draw does not matter |
+| Random Recipe choice | Edit all the Recipes through `PUT /api/recipes/{id}` to have the same known Ingredients, so the draw does not matter |
 | Time | Tiny `PREP_TIME_SCALE`, then await the status the API reports |
 | Farmers Market | WireMock stubs per test: zero sales, sequenced sales, delays past the read timeout, 5xx |
 | Restart recovery | Stop and restart the app against the same database container; every accepted Order still reaches **delivered** |
@@ -320,7 +345,7 @@ Two checks sit outside that seam:
 
 | Check | What |
 |---|---|
-| Architecture | `ApplicationModules.of(App.class).verify()` |
+| Architecture | ArchUnit: `domain` free of Spring and `infrastructure`; modules reach each other only through `domain/ports/in` or `shared` |
 | Load (k6) | 1,000 Orders = 100 concurrent × 10, with `PREP_TIME_SCALE=0.01` and enough capacity. Pass when p99 < 200 ms, every Order exists exactly once, stock invariants hold, and all are **delivered** before a timeout. |
 
 ## 12. Open questions
@@ -330,10 +355,11 @@ Two checks sit outside that seam:
 ## 13. Repository layout
 
 ```
-backend/            Gradle project (modules = Java packages, verified by Spring Modulith)
+backend/            Gradle project (modules = Java packages, verified by ArchUnit)
 frontend/           Vue + Vite app
 infra/
-  docker-compose.yml   postgres, wiremock, backend, frontend
+  docker-compose.yml   postgres, wiremock, backend, frontend, gateway
+  nginx.conf           gateway routes: /api/ to the backend, everything else to the frontend
   wiremock/mappings/   buy.json — quantitySold {{randomInt lower=0 upper=10}}, uniform delay 0–3 s
 load-tests/         k6 scripts
 docs/  prd.md · rfc/ · adr/
