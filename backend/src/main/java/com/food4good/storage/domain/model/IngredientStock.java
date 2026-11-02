@@ -12,4 +12,9 @@ public record IngredientStock(Ingredient ingredient, int onHand, int reserved) {
     public IngredientStock reserve(int units) {
         return new IngredientStock(ingredient, onHand, reserved + units);
     }
+
+    /** Takes reserved units out of Food Storage. */
+    public IngredientStock consume(int units) {
+        return new IngredientStock(ingredient, onHand - units, reserved - units);
+    }
 }

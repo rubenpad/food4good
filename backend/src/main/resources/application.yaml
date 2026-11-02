@@ -13,8 +13,16 @@ spring:
       initial_stock: ${FOOD4GOOD_STORAGE_INITIAL_STOCK:5}
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/food4good}
+    hikari:
+      # The default of 10, plus one connection each for the stock writer and the kitchen scheduler.
+      maximum-pool-size: 12
     username: ${DATABASE_USER:food4good}
     password: ${DATABASE_PASSWORD:food4good}
+
+food4good:
+  kitchen:
+    cooks: ${FOOD4GOOD_KITCHEN_COOKS:4}
+    preparation-time-scale: ${FOOD4GOOD_KITCHEN_PREPARATION_TIME_SCALE:1.0}
 
 management:
   endpoints:

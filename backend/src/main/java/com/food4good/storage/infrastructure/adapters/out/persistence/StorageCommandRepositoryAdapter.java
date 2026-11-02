@@ -21,13 +21,22 @@ class StorageCommandRepositoryAdapter implements StorageCommandRepositoryPort {
 
     @Override
     public void enqueueReservations(List<UUID> orderIds) {
+        enqueue("RESERVE", orderIds);
+    }
+
+    @Override
+    public void enqueueConsumptions(List<UUID> orderIds) {
+        enqueue("CONSUME", orderIds);
+    }
+
+    private void enqueue(String type, List<UUID> orderIds) {
         batch.batchUpdate(
                 """
                 INSERT INTO storage_command (type, payload, dedupe_key)
-                VALUES ('RESERVE', jsonb_build_object('orderId', ?::text), ?)
+                VALUES (?, jsonb_build_object('orderId', ?::text), ?)
                 """,
                 orderIds.stream()
-                        .map(orderId -> new Object[] {orderId.toString(), "RESERVE:" + orderId})
+                        .map(orderId -> new Object[] {type, orderId.toString(), type + ":" + orderId})
                         .toList());
         jdbc.sql("NOTIFY storage_commands").update();
     }
@@ -69,6 +78,7 @@ class StorageCommandRepositoryAdapter implements StorageCommandRepositoryPort {
     private static StorageCommand toCommand(long id, String type, String orderId) {
         return switch (type) {
             case "RESERVE" -> new StorageCommand.Reserve(id, UUID.fromString(orderId));
+            case "CONSUME" -> new StorageCommand.Consume(id, UUID.fromString(orderId));
             default -> throw new IllegalStateException("Unknown storage command type " + type);
         };
     }

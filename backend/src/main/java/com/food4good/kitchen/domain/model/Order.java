@@ -14,5 +14,6 @@ public record Order(
         Instant acceptedAt,
         Instant readyAt,
         Instant preparingAt,
+        Instant prepareUntil,
         Instant deliveredAt) {
 }

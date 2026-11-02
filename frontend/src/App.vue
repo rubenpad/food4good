@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import KitchenPanel from "./kitchen/KitchenPanel.vue";
 import OrderHistoryPanel from "./orders/OrderHistoryPanel.vue";
 import PlaceOrdersPanel from "./orders/PlaceOrdersPanel.vue";
 import RecipesPanel from "./recipes/RecipesPanel.vue";
@@ -12,6 +13,7 @@ import StoragePanel from "./storage/StoragePanel.vue";
   </header>
   <main class="dashboard">
     <PlaceOrdersPanel />
+    <KitchenPanel />
     <OrderHistoryPanel />
     <StoragePanel />
     <RecipesPanel />

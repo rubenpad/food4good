@@ -9,6 +9,9 @@ public interface StorageCommandRepositoryPort {
     /** Queues reservations and wakes the stock writer once the transaction commits. */
     void enqueueReservations(List<UUID> orderIds);
 
+    /** Queues consuming these Orders' Reservations and wakes the stock writer once the transaction commits. */
+    void enqueueConsumptions(List<UUID> orderIds);
+
     /** The oldest pending commands, in the order they were queued. */
     List<StorageCommand> findPending(int limit);
 

@@ -11,7 +11,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -37,7 +40,7 @@ class OrderRepositoryAdapter implements OrderRepositoryPort {
                             order.id(),
                             order.recipe().id(),
                             order.recipe().name(),
-                            order.recipe().preparationTime().toMillis()
+                            order.preparationTime().toMillis()
                         })
                         .toList());
     }
@@ -46,7 +49,7 @@ class OrderRepositoryAdapter implements OrderRepositoryPort {
     public List<Order> find(OrderQuery query) {
         var sql = new StringBuilder("""
                 SELECT id, recipe_id, recipe_name, preparation_ms, status,
-                       accepted_at, ready_at, preparing_at, delivered_at
+                       accepted_at, ready_at, preparing_at, prepare_until, delivered_at
                 FROM orders
                 WHERE true
                 """);
@@ -75,6 +78,67 @@ class OrderRepositoryAdapter implements OrderRepositoryPort {
         jdbc.sql("UPDATE orders SET status = 'READY', ready_at = now() WHERE id = :id AND status = 'WAITING_FOR_INGREDIENTS'")
                 .param("id", orderId)
                 .update();
+        // Sent on commit, so the scheduler only wakes once the Order really is ready.
+        jdbc.sql("NOTIFY kitchen_orders").update();
+    }
+
+    @Override
+    public void deliverDue() {
+        jdbc.sql("""
+                UPDATE orders
+                SET status = 'DELIVERED', delivered_at = now()
+                WHERE status = 'PREPARING' AND prepare_until <= now()
+                """).update();
+    }
+
+    @Override
+    public int countPreparing() {
+        return jdbc.sql("SELECT count(*) FROM orders WHERE status = 'PREPARING'").query(Integer.class).single();
+    }
+
+    @Override
+    public List<UUID> startPreparing(int limit) {
+        return jdbc.sql("""
+                        UPDATE orders
+                        SET status = 'PREPARING',
+                            preparing_at = now(),
+                            prepare_until = now() + preparation_ms * interval '1 millisecond'
+                        WHERE id IN (
+                            SELECT id FROM orders
+                            WHERE status = 'READY'
+                            ORDER BY ready_at, id
+                            LIMIT :limit
+                            FOR UPDATE SKIP LOCKED)
+                        RETURNING id
+                        """)
+                .param("limit", limit)
+                .query(UUID.class)
+                .list();
+    }
+
+    @Override
+    public Optional<Duration> timeUntilNextDishIsDue() {
+        // Measured by the database's clock, which is the one that set the due times.
+        return jdbc.sql("""
+                        SELECT greatest(0, ceil(extract(epoch FROM min(prepare_until) - clock_timestamp()) * 1000))::bigint
+                        FROM orders
+                        WHERE status = 'PREPARING'
+                        """)
+                .query((row, rowNumber) -> {
+                    var millis = row.getLong(1);
+                    return row.wasNull() ? Optional.<Duration>empty() : Optional.of(Duration.ofMillis(millis));
+                })
+                .single();
+    }
+
+    @Override
+    public Map<OrderStatus, Integer> countOpenByStatus() {
+        var counts = new EnumMap<OrderStatus, Integer>(OrderStatus.class);
+        jdbc.sql("SELECT status, count(*) AS orders FROM orders WHERE status <> 'DELIVERED' GROUP BY status")
+                .query(row -> {
+                    counts.put(OrderStatus.valueOf(row.getString("status")), row.getInt("orders"));
+                });
+        return counts;
     }
 
     private static Order toOrder(ResultSet row) throws SQLException {
@@ -87,6 +151,7 @@ class OrderRepositoryAdapter implements OrderRepositoryPort {
                 instant(row, "accepted_at"),
                 instant(row, "ready_at"),
                 instant(row, "preparing_at"),
+                instant(row, "prepare_until"),
                 instant(row, "delivered_at"));
     }
 

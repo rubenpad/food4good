@@ -50,6 +50,7 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
             transactions.inTransaction(() -> {
                 switch (command) {
                     case StorageCommand.Reserve reserve -> reserve(reserve.orderId());
+                    case StorageCommand.Consume consume -> consume(consume.orderId());
                 }
                 commands.markDone(command.id());
             });
@@ -64,6 +65,13 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
         if (lines.stream().allMatch(ReservationLine::isFilled)) {
             markOrderReady.markReady(orderId);
         }
+    }
+
+    private void consume(UUID orderId) {
+        reservations.findLines(orderId).stream().filter(line -> !line.consumed()).forEach(line -> {
+            stock.save(stock.find(line.ingredient()).consume(line.reserved()));
+            reservations.save(line.consume());
+        });
     }
 
     private ReservationLine reserveFromAvailable(ReservationLine line) {

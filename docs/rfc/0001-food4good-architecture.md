@@ -74,6 +74,8 @@ Cross-module calls are **synchronous and run inside the caller's transaction**. 
 
 `domain` is plain Java, so services get their transactions through `TransactionPort` in `shared`.
 
+The stock writer and the Kitchen scheduler share `SingleInstanceWorker` in `shared`: an advisory lock on one dedicated connection, waking on `NOTIFY` with a 1 s poll as backup. Each holds a connection, so the pool is 12: the default 10 plus these two. Setting `FOOD4GOOD_KITCHEN_COOKS=0` stops Orders at ready, which tests use to observe Reservations before stock is consumed.
+
 | Inbound port | Offered by | Used by | Effect |
 |---|---|---|---|
 | `RequestIngredientsUseCase.request(requests)` | storage | kitchen | Records the Reservation lines and enqueues `RESERVE` storage commands |
@@ -274,7 +276,7 @@ All endpoints are under `/api`. JSON uses camelCase. The OpenAPI document is gen
 |---|---|
 | `POST /orders` `{quantity}` | → `200 {requested, accepted, orderIds[], estimatedWaitSeconds}`. `400` if quantity < 1 or > 10,000. Accepting 0 is still `200`. |
 | `GET /orders?status=&cursor=&limit=` | Order history, newest first, keyset-paginated on `(accepted_at, id)`: `{items, nextCursor}`. `limit` is 1–200, default 50. `nextCursor` is null on the last page. |
-| `GET /kitchen` | `{cooks, busyCooks, maxWaitSeconds, backlogSeconds, estimatedCapacity}` |
+| `GET /kitchen` | `{cooks, busyCooks, ordersWaitingForIngredients, ordersReady, ordersPreparing, maxWaitSeconds, backlogSeconds, estimatedCapacity}` |
 | `GET /storage` | `[{ingredient, onHand, reserved, available}]` |
 | `GET /purchases?cursor=&limit=` | Purchase history, newest first |
 | `GET /recipes` | Recipes with id, Ingredients, quantities and preparation times, ordered by name |

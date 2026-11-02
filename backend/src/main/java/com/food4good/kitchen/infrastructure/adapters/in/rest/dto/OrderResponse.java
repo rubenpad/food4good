@@ -14,6 +14,7 @@ public record OrderResponse(
         Instant acceptedAt,
         Instant readyAt,
         Instant preparingAt,
+        Instant prepareUntil,
         Instant deliveredAt) {
 
     public static OrderResponse from(Order order) {
@@ -26,6 +27,7 @@ public record OrderResponse(
                 order.acceptedAt(),
                 order.readyAt(),
                 order.preparingAt(),
+                order.prepareUntil(),
                 order.deliveredAt());
     }
 }
