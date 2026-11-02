@@ -1,20 +1,43 @@
 <script setup lang="ts">
+import { ref } from "vue";
+import Button from "primevue/button";
 import Card from "primevue/card";
-import DataTable from "primevue/datatable";
 import Column from "primevue/column";
-import Tag from "primevue/tag";
+import DataTable from "primevue/datatable";
 import Message from "primevue/message";
-import { formatDuration, useRecipes } from "./recipes";
+import Tag from "primevue/tag";
+import RecipeDialog from "./RecipeDialog.vue";
+import { formatDuration, useRecipes, type Recipe } from "./recipes";
 
 const { data: recipes, error, isPending } = useRecipes();
+
+const dialogVisible = ref(false);
+const editing = ref<Recipe | null>(null);
+
+function openDialog(recipe: Recipe | null) {
+  editing.value = recipe;
+  dialogVisible.value = true;
+}
 </script>
 
 <template>
   <Card>
-    <template #title>Recipes</template>
+    <template #title>
+      <div class="title">
+        <span>Recipes</span>
+        <Button label="New Recipe" size="small" @click="openDialog(null)" />
+      </div>
+    </template>
     <template #content>
       <Message v-if="error" severity="error">Could not load Recipes: {{ error.message }}</Message>
-      <DataTable v-else :value="recipes ?? []" :loading="isPending" data-key="id" size="small">
+      <DataTable
+        v-else
+        :value="recipes ?? []"
+        :loading="isPending"
+        data-key="id"
+        size="small"
+        scrollable
+      >
         <Column field="name" header="Recipe" />
         <Column header="Ingredients">
           <template #body="{ data }">
@@ -31,12 +54,32 @@ const { data: recipes, error, isPending } = useRecipes();
         <Column header="Preparation time">
           <template #body="{ data }">{{ formatDuration(data.preparationTimeSeconds) }}</template>
         </Column>
+        <Column header="">
+          <template #body="{ data }">
+            <Button
+              label="Edit"
+              size="small"
+              severity="secondary"
+              text
+              :aria-label="`Edit ${data.name}`"
+              @click="openDialog(data)"
+            />
+          </template>
+        </Column>
       </DataTable>
     </template>
   </Card>
+  <RecipeDialog v-model:visible="dialogVisible" :recipe="editing" />
 </template>
 
 <style scoped>
+.title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .ingredients {
   display: flex;
   flex-wrap: wrap;

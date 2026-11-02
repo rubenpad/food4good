@@ -1,0 +1,28 @@
+# Layered on infra/docker-compose.yml by run.sh: a throwaway stack with an in-memory database and
+# no published ports, so it neither touches the dev database nor clashes with a running dev stack.
+services:
+  postgres:
+    ports: !reset []
+    volumes: !reset []
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  backend:
+    ports: !reset []
+
+  gateway:
+    ports: !reset []
+
+  playwright:
+    # Keep this version equal to @playwright/test in package.json.
+    image: mcr.microsoft.com/playwright:v1.64.1-noble
+    user: ${E2E_USER:-1000:1000}
+    working_dir: /e2e
+    volumes:
+      - ../e2e:/e2e
+    environment:
+      HOME: /tmp
+      BASE_URL: http://gateway
+    command: sh -c "npm ci --no-audit --no-fund && npm test"
+    depends_on:
+      - gateway

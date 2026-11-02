@@ -30,6 +30,7 @@ import RecipesPanel from "./recipes/RecipesPanel.vue";
 
 .dashboard {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   padding: 1rem;
   max-width: 72rem;

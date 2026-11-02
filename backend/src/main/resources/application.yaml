@@ -4,6 +4,10 @@ spring:
   threads:
     virtual:
       enabled: true
+  jackson:
+    deserialization:
+      # 1.5 is not a whole quantity; refuse it rather than truncating it to 1.
+      accept-float-as-int: false
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/food4good}
     username: ${DATABASE_USER:food4good}

@@ -1,22 +1,52 @@
-import { useQuery } from "@pinia/colada";
-import { getJson } from "../api/http";
+import { useMutation, useQuery, useQueryCache } from "@pinia/colada";
+import { getJson, sendJson } from "../api/http";
+
+export const INGREDIENTS = [
+  "cheese",
+  "chicken",
+  "ketchup",
+  "lemon",
+  "lettuce",
+  "meat",
+  "onion",
+  "potato",
+  "rice",
+  "tomato",
+];
 
 export interface IngredientQuantity {
   ingredient: string;
   quantity: number;
 }
 
-export interface Recipe {
-  id: string;
+export interface RecipeDetails {
   name: string;
   preparationTimeSeconds: number;
   ingredients: IngredientQuantity[];
 }
 
+export interface Recipe extends RecipeDetails {
+  id: string;
+}
+
+const RECIPES_KEY = ["recipes"];
+
 export function useRecipes() {
   return useQuery({
-    key: ["recipes"],
+    key: RECIPES_KEY,
     query: () => getJson<Recipe[]>("/recipes"),
+  });
+}
+
+/** Creates a Recipe, or edits the one with the given id. */
+export function useSaveRecipe() {
+  const queryCache = useQueryCache();
+  return useMutation({
+    mutation: ({ id, details }: { id?: string; details: RecipeDetails }) =>
+      id
+        ? sendJson<Recipe>("PUT", `/recipes/${id}`, details)
+        : sendJson<Recipe>("POST", "/recipes", details),
+    onSettled: () => queryCache.invalidateQueries({ key: RECIPES_KEY }),
   });
 }
 

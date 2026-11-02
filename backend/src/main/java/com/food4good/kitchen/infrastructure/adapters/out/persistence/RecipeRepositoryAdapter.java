@@ -1,5 +1,6 @@
 package com.food4good.kitchen.infrastructure.adapters.out.persistence;
 
+import com.food4good.kitchen.domain.model.DuplicateRecipeNameException;
 import com.food4good.kitchen.domain.model.Recipe;
 import com.food4good.kitchen.domain.ports.out.RecipeRepositoryPort;
 import com.food4good.shared.domain.model.Ingredient;
@@ -8,8 +9,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 class RecipeRepositoryAdapter implements RecipeRepositoryPort {
@@ -44,6 +47,55 @@ class RecipeRepositoryAdapter implements RecipeRepositoryPort {
                 .ingredients()
                 .put(row.ingredient(), row.quantity()));
         return recipes.values().stream().map(RecipeIngredients::toRecipe).toList();
+    }
+
+    @Override
+    @Transactional
+    public void insert(Recipe recipe) {
+        try {
+            jdbc.sql("INSERT INTO recipe (id, name, preparation_time_seconds) VALUES (:id, :name, :seconds)")
+                    .param("id", recipe.id())
+                    .param("name", recipe.name())
+                    .param("seconds", seconds(recipe))
+                    .update();
+        } catch (DuplicateKeyException e) {
+            throw new DuplicateRecipeNameException(recipe.name());
+        }
+        insertIngredients(recipe);
+    }
+
+    @Override
+    @Transactional
+    public boolean update(Recipe recipe) {
+        int updated;
+        try {
+            updated = jdbc.sql("UPDATE recipe SET name = :name, preparation_time_seconds = :seconds WHERE id = :id")
+                    .param("id", recipe.id())
+                    .param("name", recipe.name())
+                    .param("seconds", seconds(recipe))
+                    .update();
+        } catch (DuplicateKeyException e) {
+            throw new DuplicateRecipeNameException(recipe.name());
+        }
+        if (updated == 0) {
+            return false;
+        }
+        jdbc.sql("DELETE FROM recipe_ingredient WHERE recipe_id = :id").param("id", recipe.id()).update();
+        insertIngredients(recipe);
+        return true;
+    }
+
+    private void insertIngredients(Recipe recipe) {
+        recipe.ingredients().forEach((ingredient, quantity) -> jdbc
+                .sql("INSERT INTO recipe_ingredient (recipe_id, ingredient, quantity) VALUES (:id, :ingredient, :quantity)")
+                .param("id", recipe.id())
+                .param("ingredient", ingredient.id())
+                .param("quantity", quantity)
+                .update());
+    }
+
+    private static int seconds(Recipe recipe) {
+        return Math.toIntExact(recipe.preparationTime().toSeconds());
     }
 
     private record RecipeIngredientRow(

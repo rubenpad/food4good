@@ -22,6 +22,7 @@ One Spring Boot application with two clean-architecture modules (`kitchen` and `
 | Market stub | WireMock with a response template |
 | Local runtime | Docker Compose, with an nginx gateway as the entry point |
 | Tests | JUnit 5, Testcontainers (PostgreSQL, WireMock), ArchUnit |
+| Dashboard tests | Playwright |
 | Load test | k6 |
 
 ## 3. Architecture overview
@@ -275,9 +276,11 @@ All endpoints are under `/api`. JSON uses camelCase. The OpenAPI document is gen
 | `GET /storage` | `[{ingredient, onHand, reserved, available}]` |
 | `GET /purchases?cursor=&limit=` | Purchase history, newest first |
 | `GET /recipes` | Recipes with id, Ingredients, quantities and preparation times, ordered by name |
-| `POST /recipes` | Creates a Recipe. `400` if invalid, `409` if the name is taken. |
+| `POST /recipes` | Creates a Recipe: `201` with its location. `400` if invalid, `409` if the name is taken. |
 | `PUT /recipes/{id}` | Replaces a Recipe's name, Ingredients and preparation time. `400`, `404`, `409`. |
 | `GET /events` | SSE stream (§7) |
+
+Errors are RFC 9457 problem details, with the message for the Manager in `detail`.
 
 `estimatedCapacity` = ⌊(maxWait × cooks − backlogWork) ÷ avgPrep⌋, never below 0 (PRD FR-2).
 
@@ -341,11 +344,12 @@ Each batch carries a monotonic `id`. A client that reconnects refetches all quer
 | Stock invariants | `GET /api/storage` after each step: on hand ≥ 0, reserved ≥ 0, reserved ≤ on hand |
 | Concurrency | N concurrent `POST /api/orders`, then check invariants and that the count of distinct Orders equals the sum of `accepted` |
 
-Two checks sit outside that seam:
+Three checks sit outside that seam:
 
 | Check | What |
 |---|---|
 | Architecture | ArchUnit: `domain` free of Spring and `infrastructure`; modules reach each other only through `domain/ports/in` or `shared` |
+| Dashboard (Playwright) | A few browser flows that API tests can't see, such as forms showing API errors and phone layout, run by `e2e/run.sh` on a throwaway Compose stack with an in-memory database. Behaviour belongs in API tests; this only covers what the Manager sees. |
 | Load (k6) | 1,000 Orders = 100 concurrent × 10, with `PREP_TIME_SCALE=0.01` and enough capacity. Pass when p99 < 200 ms, every Order exists exactly once, stock invariants hold, and all are **delivered** before a timeout. |
 
 ## 12. Open questions
@@ -361,6 +365,7 @@ infra/
   docker-compose.yml   postgres, wiremock, backend, frontend, gateway
   nginx.conf           gateway routes: /api/ to the backend, everything else to the frontend
   wiremock/mappings/   buy.json — quantitySold {{randomInt lower=0 upper=10}}, uniform delay 0–3 s
+e2e/                Playwright dashboard tests and their throwaway Compose stack
 load-tests/         k6 scripts
 docs/  prd.md · rfc/ · adr/
 GLOSSARY.md
