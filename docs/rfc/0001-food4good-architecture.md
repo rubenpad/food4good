@@ -305,13 +305,23 @@ Each batch carries a monotonic `id`. A client that reconnects refetches all quer
 
 ## 11. Testing and verification
 
-| Layer | What |
+**One seam: the public HTTP API (REST + SSE).** Behaviour tests boot the whole app against Testcontainers PostgreSQL and a WireMock Farmers Market, act only through `/api`, and assert only on what the API returns. There are no in-memory fakes or test-only hooks in production code. Configuration provides the control instead:
+
+| Control | How |
 |---|---|
-| Unit | Domain and use cases with in-memory port fakes: admission maths, Reservation filling, surplus, backoff, lifecycle transitions. Covers PRD FR acceptance scenarios. |
-| Integration | Testcontainers PostgreSQL: SQL adapters, `SKIP LOCKED` claims, advisory-lock single writer, restart recovery (kill the worker mid-flow, restart, assert completion). WireMock container for the market adapter (timeouts, zero sales). |
-| Concurrency | N parallel `RESERVE` and `ADD_PURCHASE` flows. Assert NFR-3 invariants after every step and that no unit is double-reserved. |
+| Random Recipe choice | Configure a single Recipe, or Recipes with known Ingredients, so the draw does not matter |
+| Time | Tiny `PREP_TIME_SCALE`, then await the status the API reports |
+| Farmers Market | WireMock stubs per test: zero sales, sequenced sales, delays past the read timeout, 5xx |
+| Restart recovery | Stop and restart the app against the same database container; every accepted Order still reaches **delivered** |
+| Stock invariants | `GET /api/storage` after each step: on hand ≥ 0, reserved ≥ 0, reserved ≤ on hand |
+| Concurrency | N concurrent `POST /api/orders`, then check invariants and that the count of distinct Orders equals the sum of `accepted` |
+
+Two checks sit outside that seam:
+
+| Check | What |
+|---|---|
 | Architecture | `ApplicationModules.of(App.class).verify()` |
-| Load (k6) | 1,000 Orders = 100 concurrent × 10, with `PREP_TIME_SCALE=0.01` and enough capacity. Pass when p99 < 200 ms, every Order has exactly one row, stock invariants hold, and all are `DELIVERED` before a timeout. |
+| Load (k6) | 1,000 Orders = 100 concurrent × 10, with `PREP_TIME_SCALE=0.01` and enough capacity. Pass when p99 < 200 ms, every Order exists exactly once, stock invariants hold, and all are **delivered** before a timeout. |
 
 ## 12. Open questions
 
