@@ -213,8 +213,8 @@ The **storage worker** is one virtual thread holding a session-level `pg_try_adv
 
 | Command | Effect (one transaction) |
 |---|---|
-| `RESERVE(orderId)` | For each line: `take = min(needed, on_hand − reserved)`; `reserved += take` on stock and line. For every line still short, insert `market_job(remaining = needed − reserved)`. If nothing is short, call `OrderReadiness.markReady`. |
-| `ADD_PURCHASE(jobId, attempt, qty)` | Insert `purchase` (the unique key makes it idempotent). `on_hand += qty`. `give = min(qty, line.needed − line.reserved)`; `reserved += give` on stock and line. Surplus `qty − give` stays available. If every line is full, call `markReady`. |
+| `RESERVE(orderId)` | For each line: `take = min(needed, on_hand − reserved)`; `reserved += take` on stock and line. For every line still short, insert `market_job(remaining = needed − reserved)`. If nothing is short, call `MarkOrderReadyUseCase.markReady`. |
+| `ADD_PURCHASE(jobId, attempt, qty)` | Insert `purchase` (the unique key makes it idempotent). `on_hand += qty`. `give = min(qty, line.needed − line.reserved)`; `reserved += give` on stock and line. Surplus `qty − give` stays available. If every line is full, call `MarkOrderReadyUseCase.markReady`. |
 | `CONSUME(orderId)` | For each line not yet consumed: `on_hand −= reserved`, `stock.reserved −= reserved`, `consumed = true`. |
 
 Each command is a few row updates, so even a 1,000-Order burst (1,000 `RESERVE`s) drains in seconds.
@@ -248,7 +248,7 @@ sequenceDiagram
 One kitchen scheduler loop, holding `pg_try_advisory_lock(KITCHEN)`, wakes on `NOTIFY kitchen` (when an Order becomes ready), on the earliest `prepare_until`, or after a 1 s fallback poll. Each tick has two steps:
 
 1. **Deliver.** `UPDATE orders SET status='DELIVERED', delivered_at=now() WHERE status='PREPARING' AND prepare_until <= now()`.
-2. **Start.** `free = cooks − count(PREPARING)`. Claim up to `free` READY Orders `ORDER BY ready_at FOR UPDATE SKIP LOCKED`. Set them `PREPARING`, `preparing_at=now()`, `prepare_until=now()+preparation_ms`, and call `IngredientRequests.consume(orderId)` in the same transaction.
+2. **Start.** `free = cooks − count(PREPARING)`. Claim up to `free` READY Orders `ORDER BY ready_at FOR UPDATE SKIP LOCKED`. Set them `PREPARING`, `preparing_at=now()`, `prepare_until=now()+preparation_ms`, and call `ConsumeReservationUseCase.consume(orderId)` in the same transaction.
 
 No thread sleeps through a preparation and no transaction stays open. Because `prepare_until` is stored, a restart resumes cooking exactly where it stopped (NFR-2).
 
