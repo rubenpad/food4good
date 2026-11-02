@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: food4good
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/food4good}
+    username: ${DATABASE_USER:food4good}
+    password: ${DATABASE_PASSWORD:food4good}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+# Recipes are configuration (PRD §6). A list is replaced as a whole, never merged, so to change
+# Recipes from the environment supply the complete set, e.g.
+# SPRING_APPLICATION_JSON='{"food4good":{"kitchen":{"recipes":[{"name":"Plain Rice","preparation-time":"45s","ingredients":{"rice":3}}]}}}'
+food4good:
+  kitchen:
+    recipes:
+      - name: Grilled Chicken Salad
+        preparation-time: 90s
+        ingredients: { chicken: 1, lettuce: 2, tomato: 1, lemon: 1 }
+      - name: Cheeseburger
+        preparation-time: 120s
+        ingredients: { meat: 1, cheese: 1, lettuce: 1, tomato: 1, onion: 1, ketchup: 1 }
+      - name: Lemon Chicken & Rice
+        preparation-time: 150s
+        ingredients: { chicken: 1, rice: 2, onion: 1, lemon: 1 }
+      - name: Loaded Potatoes
+        preparation-time: 180s
+        ingredients: { potato: 2, cheese: 1, meat: 1, onion: 1 }
+      - name: Tomato Rice
+        preparation-time: 60s
+        ingredients: { rice: 2, tomato: 2, onion: 1 }
+      - name: Fries with Ketchup
+        preparation-time: 30s
+        ingredients: { potato: 2, ketchup: 1 }
