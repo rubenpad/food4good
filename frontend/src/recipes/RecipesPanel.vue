@@ -14,7 +14,7 @@ const { data: recipes, error, isPending } = useRecipes();
     <template #title>Recipes</template>
     <template #content>
       <Message v-if="error" severity="error">Could not load Recipes: {{ error.message }}</Message>
-      <DataTable v-else :value="recipes ?? []" :loading="isPending" data-key="name" size="small">
+      <DataTable v-else :value="recipes ?? []" :loading="isPending" data-key="id" size="small">
         <Column field="name" header="Recipe" />
         <Column header="Ingredients">
           <template #body="{ data }">

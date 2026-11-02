@@ -1,15 +1,19 @@
-package com.food4good.kitchen.domain;
+package com.food4good.kitchen.domain.model;
 
-import com.food4good.storage.Ingredient;
+import com.food4good.shared.domain.model.Ingredient;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /** A preparation the Kitchen can make: the Ingredients it needs, how many of each, and how long it takes. */
-public record Recipe(String name, Duration preparationTime, Map<Ingredient, Integer> ingredients) {
+public record Recipe(UUID id, String name, Duration preparationTime, Map<Ingredient, Integer> ingredients) {
 
     public Recipe {
+        if (id == null) {
+            throw new IllegalArgumentException("Every Recipe needs an id");
+        }
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("Every Recipe needs a name");
         }

@@ -7,6 +7,7 @@ export interface IngredientQuantity {
 }
 
 export interface Recipe {
+  id: string;
   name: string;
   preparationTimeSeconds: number;
   ingredients: IngredientQuantity[];
@@ -16,8 +17,6 @@ export function useRecipes() {
   return useQuery({
     key: ["recipes"],
     query: () => getJson<Recipe[]>("/recipes"),
-    // Recipes are fixed configuration; they only change when the backend restarts.
-    staleTime: Infinity,
   });
 }
 
