@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/farmers-market/buy",
+    "queryParameters": { "ingredient": { "matches": ".+" } }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "body": "{\"quantitySold\": {{randomInt lower=0 upper=11}} }",
+    "transformers": ["response-template"],
+    "delayDistribution": { "type": "uniform", "lower": 0, "upper": 3000 }
+  }
+}

@@ -14,8 +14,8 @@ spring:
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/food4good}
     hikari:
-      # The default of 10, plus one connection each for the stock writer and the kitchen scheduler.
-      maximum-pool-size: 12
+      # The default of 10, plus one connection each for the three single-instance workers.
+      maximum-pool-size: 13
     username: ${DATABASE_USER:food4good}
     password: ${DATABASE_PASSWORD:food4good}
 
@@ -23,6 +23,11 @@ food4good:
   kitchen:
     cooks: ${FOOD4GOOD_KITCHEN_COOKS:4}
     preparation-time-scale: ${FOOD4GOOD_KITCHEN_PREPARATION_TIME_SCALE:1.0}
+  market:
+    url: ${FOOD4GOOD_MARKET_URL:http://localhost:8089}
+    connect-timeout: ${FOOD4GOOD_MARKET_CONNECT_TIMEOUT:1s}
+    read-timeout: ${FOOD4GOOD_MARKET_READ_TIMEOUT:2s}
+    max-concurrent-calls: ${FOOD4GOOD_MARKET_MAX_CONCURRENT_CALLS:20}
 
 management:
   endpoints:

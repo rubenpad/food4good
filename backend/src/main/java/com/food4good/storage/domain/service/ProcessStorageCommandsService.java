@@ -2,9 +2,12 @@ package com.food4good.storage.domain.service;
 
 import com.food4good.kitchen.domain.ports.in.MarkOrderReadyUseCase;
 import com.food4good.shared.domain.ports.out.TransactionPort;
+import com.food4good.storage.domain.model.MarketShortfall;
 import com.food4good.storage.domain.model.ReservationLine;
 import com.food4good.storage.domain.model.StorageCommand;
 import com.food4good.storage.domain.ports.in.ProcessStorageCommandsUseCase;
+import com.food4good.storage.domain.ports.out.MarketJobRepositoryPort;
+import com.food4good.storage.domain.ports.out.PurchaseRepositoryPort;
 import com.food4good.storage.domain.ports.out.ReservationRepositoryPort;
 import com.food4good.storage.domain.ports.out.StockRepositoryPort;
 import com.food4good.storage.domain.ports.out.StorageCommandRepositoryPort;
@@ -21,6 +24,8 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
     private final StockRepositoryPort stock;
     private final ReservationRepositoryPort reservations;
     private final StorageCommandRepositoryPort commands;
+    private final MarketJobRepositoryPort marketJobs;
+    private final PurchaseRepositoryPort purchases;
     private final MarkOrderReadyUseCase markOrderReady;
     private final TransactionPort transactions;
 
@@ -28,11 +33,15 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
             StockRepositoryPort stock,
             ReservationRepositoryPort reservations,
             StorageCommandRepositoryPort commands,
+            MarketJobRepositoryPort marketJobs,
+            PurchaseRepositoryPort purchases,
             MarkOrderReadyUseCase markOrderReady,
             TransactionPort transactions) {
         this.stock = stock;
         this.reservations = reservations;
         this.commands = commands;
+        this.marketJobs = marketJobs;
+        this.purchases = purchases;
         this.markOrderReady = markOrderReady;
         this.transactions = transactions;
     }
@@ -51,6 +60,7 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
                 switch (command) {
                     case StorageCommand.Reserve reserve -> reserve(reserve.orderId());
                     case StorageCommand.Consume consume -> consume(consume.orderId());
+                    case StorageCommand.AddPurchase purchase -> addPurchase(purchase);
                 }
                 commands.markDone(command.id());
             });
@@ -62,8 +72,31 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
 
     private void reserve(UUID orderId) {
         var lines = reservations.findLines(orderId).stream().map(this::reserveFromAvailable).toList();
-        if (lines.stream().allMatch(ReservationLine::isFilled)) {
+        var shortfalls = lines.stream()
+                .filter(line -> !line.isFilled())
+                .map(line -> new MarketShortfall(orderId, line.ingredient(), line.shortfall()))
+                .toList();
+        if (shortfalls.isEmpty()) {
             markOrderReady.markReady(orderId);
+        } else {
+            marketJobs.insertAll(shortfalls);
+        }
+    }
+
+    /** What was bought goes to the Order that needed it first; anything beyond that is available to everyone. */
+    private void addPurchase(StorageCommand.AddPurchase purchase) {
+        purchases.insert(purchase.marketJobId(), purchase.attempt(), purchase.ingredient(), purchase.quantity());
+        var lines = reservations.findLines(purchase.orderId());
+        var line = lines.stream()
+                .filter(candidate -> candidate.ingredient() == purchase.ingredient())
+                .findFirst()
+                .orElseThrow();
+        var units = Math.min(purchase.quantity(), line.shortfall());
+        stock.save(stock.find(purchase.ingredient()).receive(purchase.quantity()).reserve(units));
+        reservations.save(line.fill(units));
+        var others = lines.stream().filter(candidate -> candidate.ingredient() != purchase.ingredient());
+        if (units == line.shortfall() && others.allMatch(ReservationLine::isFilled)) {
+            markOrderReady.markReady(purchase.orderId());
         }
     }
 
