@@ -9,6 +9,7 @@ import com.food4good.kitchen.domain.ports.in.ListRecipesUseCase;
 import com.food4good.kitchen.domain.ports.in.MarkOrderReadyUseCase;
 import com.food4good.kitchen.domain.ports.in.PlaceOrdersUseCase;
 import com.food4good.kitchen.domain.ports.in.UpdateRecipeUseCase;
+import com.food4good.kitchen.domain.ports.out.OrderChangesPort;
 import com.food4good.kitchen.domain.ports.out.OrderRepositoryPort;
 import com.food4good.kitchen.domain.ports.out.RecipeRepositoryPort;
 import com.food4good.kitchen.domain.service.CookOrdersService;
@@ -57,8 +58,9 @@ class KitchenConfiguration {
             OrderRepositoryPort orders,
             RequestIngredientsUseCase requestIngredients,
             TransactionPort transactions,
+            OrderChangesPort orderChanges,
             KitchenSettings settings) {
-        return new PlaceOrdersService(recipes, orders, requestIngredients, transactions, settings);
+        return new PlaceOrdersService(recipes, orders, requestIngredients, transactions, orderChanges, settings);
     }
 
     @Bean
@@ -66,8 +68,9 @@ class KitchenConfiguration {
             OrderRepositoryPort orders,
             ConsumeReservationUseCase consumeReservation,
             TransactionPort transactions,
+            OrderChangesPort orderChanges,
             KitchenSettings settings) {
-        return new CookOrdersService(orders, consumeReservation, transactions, settings);
+        return new CookOrdersService(orders, consumeReservation, transactions, orderChanges, settings);
     }
 
     @Bean
@@ -82,7 +85,7 @@ class KitchenConfiguration {
     }
 
     @Bean
-    MarkOrderReadyUseCase markOrderReadyUseCase(OrderRepositoryPort orders) {
-        return new MarkOrderReadyService(orders);
+    MarkOrderReadyUseCase markOrderReadyUseCase(OrderRepositoryPort orders, OrderChangesPort orderChanges) {
+        return new MarkOrderReadyService(orders, orderChanges);
     }
 }

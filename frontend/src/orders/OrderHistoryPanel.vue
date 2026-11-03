@@ -7,7 +7,6 @@ import DataTable from "primevue/datatable";
 import Message from "primevue/message";
 import Select from "primevue/select";
 import Tag from "primevue/tag";
-import { usePolling } from "../usePolling";
 import { ORDER_STATUSES, useOrderPage, type OrderStatus } from "./orders";
 
 const status = ref<OrderStatus | null>(null);
@@ -15,8 +14,7 @@ const status = ref<OrderStatus | null>(null);
 const previousCursors = ref<(string | null)[]>([]);
 const cursor = ref<string | null>(null);
 
-const { data: page, error, refetch } = useOrderPage(status, cursor);
-usePolling(refetch);
+const { data: page, error } = useOrderPage(status, cursor);
 
 watch(status, () => {
   previousCursors.value = [];
@@ -56,8 +54,10 @@ const time = (value: string) => new Date(value).toLocaleTimeString();
         </div>
       </template>
       <template #content>
-        <Message v-if="error" severity="error">Could not load Orders: {{ error.message }}</Message>
-        <DataTable v-else :value="orders" data-key="id" size="small" scrollable>
+        <Message v-if="error" severity="error"
+          >Could not refresh Orders: {{ error.message }}</Message
+        >
+        <DataTable :value="orders" data-key="id" size="small" scrollable>
           <template #empty>No Orders yet</template>
           <Column header="Accepted">
             <template #body="{ data }">{{ time(data.acceptedAt) }}</template>

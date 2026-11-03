@@ -30,8 +30,10 @@ const time = (value: string) => new Date(value).toLocaleTimeString();
 <template>
   <section class="purchases" aria-label="Purchase history">
     <h3>Purchase history</h3>
-    <Message v-if="error" severity="error">Could not load Purchases: {{ error.message }}</Message>
-    <DataTable v-else :value="purchases" data-key="id" size="small" scrollable>
+    <Message v-if="error" severity="error"
+      >Could not refresh Purchases: {{ error.message }}</Message
+    >
+    <DataTable :value="purchases" data-key="id" size="small" scrollable>
       <template #empty>Nothing bought from the Farmers Market yet</template>
       <Column field="ingredient" header="Ingredient" />
       <Column field="quantity" header="Units" />

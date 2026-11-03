@@ -23,13 +23,13 @@ usePolling(refetch);
       </template>
       <template #content>
         <Message v-if="error" severity="error"
-          >Could not load the Kitchen: {{ error.message }}</Message
+          >Could not refresh the Kitchen: {{ error.message }}</Message
         >
-        <p v-if="kitchen && !error" class="backlog">
+        <p v-if="kitchen" class="backlog">
           Backlog: {{ formatDuration(kitchen.backlogSeconds) }} (estimated) · Maximum wait:
           {{ formatDuration(kitchen.maxWaitSeconds) }}
         </p>
-        <div v-if="kitchen && !error" class="columns">
+        <div v-if="kitchen" class="columns">
           <OrderColumn
             status="WAITING_FOR_INGREDIENTS"
             title="Waiting for ingredients"

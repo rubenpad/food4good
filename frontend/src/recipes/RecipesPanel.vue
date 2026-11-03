@@ -31,9 +31,10 @@ function openDialog(recipe: Recipe | null) {
         </div>
       </template>
       <template #content>
-        <Message v-if="error" severity="error">Could not load Recipes: {{ error.message }}</Message>
+        <Message v-if="error" severity="error"
+          >Could not refresh Recipes: {{ error.message }}</Message
+        >
         <DataTable
-          v-else
           :value="recipes ?? []"
           :loading="isPending"
           data-key="id"

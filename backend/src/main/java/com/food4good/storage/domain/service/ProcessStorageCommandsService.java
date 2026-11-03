@@ -9,6 +9,7 @@ import com.food4good.storage.domain.ports.in.ProcessStorageCommandsUseCase;
 import com.food4good.storage.domain.ports.out.MarketJobRepositoryPort;
 import com.food4good.storage.domain.ports.out.PurchaseRepositoryPort;
 import com.food4good.storage.domain.ports.out.ReservationRepositoryPort;
+import com.food4good.storage.domain.ports.out.StockChangesPort;
 import com.food4good.storage.domain.ports.out.StockRepositoryPort;
 import com.food4good.storage.domain.ports.out.StorageCommandRepositoryPort;
 import java.util.UUID;
@@ -27,6 +28,7 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
     private final MarketJobRepositoryPort marketJobs;
     private final PurchaseRepositoryPort purchases;
     private final MarkOrderReadyUseCase markOrderReady;
+    private final StockChangesPort stockChanges;
     private final TransactionPort transactions;
 
     public ProcessStorageCommandsService(
@@ -36,6 +38,7 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
             MarketJobRepositoryPort marketJobs,
             PurchaseRepositoryPort purchases,
             MarkOrderReadyUseCase markOrderReady,
+            StockChangesPort stockChanges,
             TransactionPort transactions) {
         this.stock = stock;
         this.reservations = reservations;
@@ -43,6 +46,7 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
         this.marketJobs = marketJobs;
         this.purchases = purchases;
         this.markOrderReady = markOrderReady;
+        this.stockChanges = stockChanges;
         this.transactions = transactions;
     }
 
@@ -63,6 +67,7 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
                     case StorageCommand.AddPurchase purchase -> addPurchase(purchase);
                 }
                 commands.markDone(command.id());
+                stockChanges.changed();
             });
         } catch (RuntimeException e) {
             log.error("Storage command {} failed", command, e);
