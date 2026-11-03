@@ -15,6 +15,15 @@ public interface OrderRepositoryPort {
 
     void insertAll(List<NewOrder> orders);
 
+    /** Makes requests to place Orders take turns until the current transaction ends. */
+    void lockAdmission();
+
+    /**
+     * The preparation work of every Order not yet delivered: its whole preparation time, or for an
+     * Order being prepared, what remains of it. Time spent waiting for ingredients is not counted.
+     */
+    Duration backlogWork();
+
     /** Up to {@code query.limit() + 1} Orders, newest first, so the caller can tell whether more follow. */
     List<Order> find(OrderQuery query);
 

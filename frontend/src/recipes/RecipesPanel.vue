@@ -7,7 +7,8 @@ import DataTable from "primevue/datatable";
 import Message from "primevue/message";
 import Tag from "primevue/tag";
 import RecipeDialog from "./RecipeDialog.vue";
-import { formatDuration, useRecipes, type Recipe } from "./recipes";
+import { formatDuration } from "../formatDuration";
+import { useRecipes, type Recipe } from "./recipes";
 
 const { data: recipes, error, isPending } = useRecipes();
 

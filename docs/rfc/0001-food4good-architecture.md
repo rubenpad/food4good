@@ -74,7 +74,7 @@ Cross-module calls are **synchronous and run inside the caller's transaction**. 
 
 `domain` is plain Java, so services get their transactions through `TransactionPort` in `shared`.
 
-The stock writer, the Kitchen scheduler and the market buyer share `SingleInstanceWorker` in `shared`: an advisory lock on one dedicated connection, waking on `NOTIFY` with a 1 s poll as backup. Each holds a connection, so the pool is 13: the default 10 plus these three. Setting `FOOD4GOOD_KITCHEN_COOKS=0` stops Orders at ready, which tests use to observe Reservations before stock is consumed.
+The stock writer, the Kitchen scheduler and the market buyer share `SingleInstanceWorker` in `shared`: an advisory lock on one dedicated connection, waking on `NOTIFY` with a 1 s poll as backup. Each holds a connection, so the pool is 13: the default 10 plus these three. Setting `FOOD4GOOD_KITCHEN_COOKS=0` stops Orders at ready, which tests use to observe Reservations before stock is consumed. With zero Cooks, capacity and estimates assume one, since a Kitchen with no capacity could never accept the Orders that setting holds.
 
 | Inbound port | Offered by | Used by | Effect |
 |---|---|---|---|

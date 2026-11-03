@@ -12,6 +12,8 @@ services:
     environment:
       # Cooking fast enough to watch Orders finish. Stock stays low, so Orders buy from the market.
       FOOD4GOOD_KITCHEN_PREPARATION_TIME_SCALE: "0.05"
+      # Small enough that a dashboard test can fill the Kitchen.
+      FOOD4GOOD_KITCHEN_MAX_WAIT: "5m"
 
   gateway:
     ports: !reset []

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Card from "primevue/card";
 import Message from "primevue/message";
+import { formatDuration } from "../formatDuration";
 import { usePolling } from "../usePolling";
 import OrderColumn from "./OrderColumn.vue";
 import { useKitchen } from "./kitchen";
@@ -24,7 +25,11 @@ usePolling(refetch);
         <Message v-if="error" severity="error"
           >Could not load the Kitchen: {{ error.message }}</Message
         >
-        <div v-else-if="kitchen" class="columns">
+        <p v-if="kitchen && !error" class="backlog">
+          Backlog: {{ formatDuration(kitchen.backlogSeconds) }} (estimated) · Maximum wait:
+          {{ formatDuration(kitchen.maxWaitSeconds) }}
+        </p>
+        <div v-if="kitchen && !error" class="columns">
           <OrderColumn
             status="WAITING_FOR_INGREDIENTS"
             title="Waiting for ingredients"
@@ -49,6 +54,11 @@ usePolling(refetch);
 
 .cooks {
   font-size: 1rem;
+  color: var(--p-text-muted-color);
+}
+
+.backlog {
+  margin: 0 0 1rem;
   color: var(--p-text-muted-color);
 }
 

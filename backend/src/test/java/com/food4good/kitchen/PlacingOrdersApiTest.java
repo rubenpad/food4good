@@ -20,8 +20,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.TestPropertySource;
 
-// No Cooks, so Orders stop at ready and stock stays reserved.
-@TestPropertySource(properties = "food4good.kitchen.cooks=0")
+// No Cooks, so Orders stop at ready and stock stays reserved. Capacity isn't what these tests are about.
+@TestPropertySource(properties = {"food4good.kitchen.cooks=0", "food4good.kitchen.max-wait=1000h"})
 @DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
 class PlacingOrdersApiTest extends ApiTest {
 

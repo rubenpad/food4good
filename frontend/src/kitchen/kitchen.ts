@@ -7,6 +7,9 @@ export interface Kitchen {
   ordersWaitingForIngredients: number;
   ordersReady: number;
   ordersPreparing: number;
+  maxWaitSeconds: number;
+  backlogSeconds: number;
+  estimatedCapacity: number;
 }
 
 export function useKitchen() {

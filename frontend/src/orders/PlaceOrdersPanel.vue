@@ -1,13 +1,38 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import Button from "primevue/button";
 import Card from "primevue/card";
 import InputNumber from "primevue/inputnumber";
 import Message from "primevue/message";
+import { formatDuration } from "../formatDuration";
+import { useKitchen } from "../kitchen/kitchen";
 import { usePlaceOrders } from "./orders";
 
 const quantity = ref<number | null>(1);
 const { mutate, data: result, error, isLoading } = usePlaceOrders();
+const { data: kitchen } = useKitchen();
+
+const outcome = computed(() => {
+  const placed = result.value;
+  if (!placed) return null;
+  const wait = formatDuration(placed.estimatedWaitSeconds);
+  if (placed.accepted === 0) {
+    return {
+      severity: "warn",
+      text: `The Kitchen is full: accepted 0 of ${placed.requested}. Estimated wait to clear the Backlog: ${wait}.`,
+    };
+  }
+  if (placed.accepted < placed.requested) {
+    return {
+      severity: "warn",
+      text: `Accepted ${placed.accepted} of ${placed.requested}. The rest would go past the Maximum wait. Estimated wait: ${wait}.`,
+    };
+  }
+  return {
+    severity: "success",
+    text: `Accepted ${placed.accepted} of ${placed.requested}. Estimated wait: ${wait}.`,
+  };
+});
 </script>
 
 <template>
@@ -21,10 +46,13 @@ const { mutate, data: result, error, isLoading } = usePlaceOrders();
             <InputNumber v-model="quantity" :use-grouping="false" />
           </label>
           <Button type="submit" label="Place Orders" :loading="isLoading" />
+          <span v-if="kitchen" class="estimate">
+            Estimate: about {{ kitchen.estimatedCapacity }} more Orders fit right now
+          </span>
         </form>
         <Message v-if="error" severity="error" class="result">{{ error.message }}</Message>
-        <Message v-else-if="result" severity="success" class="result">
-          Accepted {{ result.accepted }} of {{ result.requested }}
+        <Message v-else-if="outcome" :severity="outcome.severity" class="result">
+          {{ outcome.text }}
         </Message>
       </template>
     </Card>
@@ -42,6 +70,11 @@ const { mutate, data: result, error, isLoading } = usePlaceOrders();
 .field {
   display: grid;
   gap: 0.25rem;
+}
+
+.estimate {
+  align-self: center;
+  color: var(--p-text-muted-color);
 }
 
 .result {
