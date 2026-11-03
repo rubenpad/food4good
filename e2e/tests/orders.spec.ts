@@ -84,17 +84,27 @@ test("shows a read-only Backlog and Maximum wait, and a live estimate of what fi
   await expect(panel(page, "Place Orders").getByText(/Estimate: about \d+ more Orders fit right now/)).toBeVisible();
 });
 
-test("accepts what fits, says so, then says when the Kitchen is full", async ({ page }) => {
+test("says how many were accepted when only some fit", async ({ page }) => {
   await panel(page, "Place Orders").getByLabel("Quantity").fill("9000");
   await panel(page, "Place Orders").getByRole("button", { name: "Place Orders" }).click();
-  await expect(panel(page, "Place Orders").getByText(/Accepted \d+ of 9000\. The rest would go past/)).toBeVisible();
 
-  await panel(page, "Place Orders").getByLabel("Quantity").fill("9000");
-  await panel(page, "Place Orders").getByRole("button", { name: "Place Orders" }).click();
-  await expect(panel(page, "Place Orders").getByText(/The Kitchen is full: accepted 0 of 9000/)).toBeVisible();
-  await expect(panel(page, "Place Orders").getByText("Estimate: about 0 more Orders fit right now")).toBeVisible({
-    timeout: 10_000,
+  await expect(panel(page, "Place Orders").getByText(/Accepted \d+ of 9000\. The rest would go past/)).toBeVisible();
+});
+
+// Dishes finishing keep freeing room in a running Kitchen, so the answer is fixed here. The API tests
+// prove when a Kitchen really is full; this only checks what the Manager is told.
+test("explains when the Kitchen is full", async ({ page }) => {
+  await page.route("**/api/orders", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    await route.fulfill({ json: { requested: 5, accepted: 0, orderIds: [], estimatedWaitSeconds: 300 } });
   });
+
+  await panel(page, "Place Orders").getByLabel("Quantity").fill("5");
+  await panel(page, "Place Orders").getByRole("button", { name: "Place Orders" }).click();
+
+  await expect(
+    panel(page, "Place Orders").getByText("The Kitchen is full: accepted 0 of 5. Estimated wait to clear the Backlog: 5 min."),
+  ).toBeVisible();
 });
 
 test("every panel fits a phone screen", async ({ page }) => {

@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useOrderPage, type OrderStatus } from "../orders/orders";
-import { usePolling } from "../usePolling";
 
 const SHOWN = 8;
 
 const props = defineProps<{ status: OrderStatus; title: string; total: number }>();
 
-const { data: page, refetch } = useOrderPage(ref(props.status), ref(null));
-usePolling(refetch);
+const { data: page } = useOrderPage(ref(props.status), ref(null));
 
 const shown = computed(() => (page.value?.items ?? []).slice(0, SHOWN));
 const hidden = computed(() => Math.max(0, props.total - shown.value.length));

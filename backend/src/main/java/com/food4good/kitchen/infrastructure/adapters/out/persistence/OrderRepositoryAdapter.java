@@ -11,6 +11,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,13 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 class OrderRepositoryAdapter implements OrderRepositoryPort {
+
+    private static final String SELECT_ORDERS = """
+            SELECT id, recipe_id, recipe_name, preparation_ms, status,
+                   accepted_at, ready_at, preparing_at, prepare_until, delivered_at
+            FROM orders
+            WHERE true
+            """;
 
     private final JdbcClient jdbc;
     private final JdbcTemplate batch;
@@ -68,13 +76,16 @@ class OrderRepositoryAdapter implements OrderRepositoryPort {
     }
 
     @Override
+    public List<Order> findByIds(Collection<UUID> ids) {
+        return jdbc.sql(SELECT_ORDERS + " AND id = ANY (:ids)")
+                .param("ids", ids.toArray(UUID[]::new))
+                .query((row, rowNumber) -> toOrder(row))
+                .list();
+    }
+
+    @Override
     public List<Order> find(OrderQuery query) {
-        var sql = new StringBuilder("""
-                SELECT id, recipe_id, recipe_name, preparation_ms, status,
-                       accepted_at, ready_at, preparing_at, prepare_until, delivered_at
-                FROM orders
-                WHERE true
-                """);
+        var sql = new StringBuilder(SELECT_ORDERS);
         if (query.status() != null) {
             sql.append(" AND status = :status");
         }
@@ -105,12 +116,15 @@ class OrderRepositoryAdapter implements OrderRepositoryPort {
     }
 
     @Override
-    public void deliverDue() {
-        jdbc.sql("""
-                UPDATE orders
-                SET status = 'DELIVERED', delivered_at = now()
-                WHERE status = 'PREPARING' AND prepare_until <= now()
-                """).update();
+    public List<UUID> deliverDue() {
+        return jdbc.sql("""
+                        UPDATE orders
+                        SET status = 'DELIVERED', delivered_at = now()
+                        WHERE status = 'PREPARING' AND prepare_until <= now()
+                        RETURNING id
+                        """)
+                .query(UUID.class)
+                .list();
     }
 
     @Override

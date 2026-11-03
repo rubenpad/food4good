@@ -4,6 +4,9 @@ import OrderHistoryPanel from "./orders/OrderHistoryPanel.vue";
 import PlaceOrdersPanel from "./orders/PlaceOrdersPanel.vue";
 import RecipesPanel from "./recipes/RecipesPanel.vue";
 import StoragePanel from "./storage/StoragePanel.vue";
+import { useLiveEvents } from "./useLiveEvents";
+
+useLiveEvents();
 </script>
 
 <template>

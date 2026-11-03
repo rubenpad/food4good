@@ -5,6 +5,7 @@ import com.food4good.kitchen.domain.model.Order;
 import com.food4good.kitchen.domain.model.OrderQuery;
 import com.food4good.kitchen.domain.model.OrderStatus;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -24,14 +25,16 @@ public interface OrderRepositoryPort {
      */
     Duration backlogWork();
 
+    List<Order> findByIds(Collection<UUID> ids);
+
     /** Up to {@code query.limit() + 1} Orders, newest first, so the caller can tell whether more follow. */
     List<Order> find(OrderQuery query);
 
     /** Moves an Order waiting for ingredients to ready; has no effect in any other status. */
     void markReady(UUID orderId);
 
-    /** Moves every Order whose preparation time has passed to delivered. */
-    void deliverDue();
+    /** Moves every Order whose preparation time has passed to delivered, and returns their ids. */
+    List<UUID> deliverDue();
 
     int countPreparing();
 

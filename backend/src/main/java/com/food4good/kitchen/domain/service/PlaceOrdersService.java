@@ -6,6 +6,7 @@ import com.food4good.kitchen.domain.model.NewOrder;
 import com.food4good.kitchen.domain.model.PlacedOrders;
 import com.food4good.kitchen.domain.model.Recipe;
 import com.food4good.kitchen.domain.ports.in.PlaceOrdersUseCase;
+import com.food4good.kitchen.domain.ports.out.OrderChangesPort;
 import com.food4good.kitchen.domain.ports.out.OrderRepositoryPort;
 import com.food4good.kitchen.domain.ports.out.RecipeRepositoryPort;
 import com.food4good.shared.domain.ports.out.TransactionPort;
@@ -25,6 +26,7 @@ public class PlaceOrdersService implements PlaceOrdersUseCase {
     private final OrderRepositoryPort orders;
     private final RequestIngredientsUseCase requestIngredients;
     private final TransactionPort transactions;
+    private final OrderChangesPort orderChanges;
     private final KitchenSettings settings;
 
     public PlaceOrdersService(
@@ -32,11 +34,13 @@ public class PlaceOrdersService implements PlaceOrdersUseCase {
             OrderRepositoryPort orders,
             RequestIngredientsUseCase requestIngredients,
             TransactionPort transactions,
+            OrderChangesPort orderChanges,
             KitchenSettings settings) {
         this.recipes = recipes;
         this.orders = orders;
         this.requestIngredients = requestIngredients;
         this.transactions = transactions;
+        this.orderChanges = orderChanges;
         this.settings = settings;
     }
 
@@ -68,8 +72,9 @@ public class PlaceOrdersService implements PlaceOrdersUseCase {
                         .map(order -> new IngredientRequest(order.id(), order.recipe().ingredients()))
                         .toList());
             }
-            return new PlacedOrders(
-                    quantity, accepted.stream().map(NewOrder::id).toList(), settings.timeToClear(work));
+            var ids = accepted.stream().map(NewOrder::id).toList();
+            orderChanges.changed(ids);
+            return new PlacedOrders(quantity, ids, settings.timeToClear(work));
         });
     }
 

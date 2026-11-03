@@ -30,6 +30,10 @@ public abstract class ApiTest {
         return RestClient.create("http://localhost:" + port + "/api");
     }
 
+    protected LiveEvents subscribeToEvents() throws Exception {
+        return LiveEvents.subscribe("http://localhost:" + port + "/api");
+    }
+
     protected DocumentContext getJson(String path) {
         return JsonPath.parse(api().get().uri(path).retrieve().body(String.class));
     }
