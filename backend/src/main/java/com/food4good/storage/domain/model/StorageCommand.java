@@ -9,4 +9,7 @@ public sealed interface StorageCommand {
 
     record Reserve(long id, UUID orderId) implements StorageCommand {
     }
+
+    record Consume(long id, UUID orderId) implements StorageCommand {
+    }
 }

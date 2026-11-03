@@ -10,7 +10,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.TestPropertySource;
 
+// No Cooks, so Orders stop at ready and stock stays reserved.
+@TestPropertySource(properties = "food4good.kitchen.cooks=0")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
 class ReservationApiTest extends ApiTest {
 

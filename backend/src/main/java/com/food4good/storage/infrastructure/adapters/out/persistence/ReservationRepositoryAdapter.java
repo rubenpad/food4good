@@ -35,7 +35,7 @@ class ReservationRepositoryAdapter implements ReservationRepositoryPort {
     public List<ReservationLine> findLines(UUID orderId) {
         // Ordered so the same Order always reserves its Ingredients in the same sequence.
         return jdbc.sql("""
-                        SELECT ingredient, needed, reserved
+                        SELECT ingredient, needed, reserved, consumed
                         FROM reservation_line
                         WHERE order_id = :orderId
                         ORDER BY ingredient
@@ -45,14 +45,20 @@ class ReservationRepositoryAdapter implements ReservationRepositoryPort {
                         orderId,
                         Ingredient.fromId(row.getString("ingredient")),
                         row.getInt("needed"),
-                        row.getInt("reserved")))
+                        row.getInt("reserved"),
+                        row.getBoolean("consumed")))
                 .list();
     }
 
     @Override
     public void save(ReservationLine line) {
-        jdbc.sql("UPDATE reservation_line SET reserved = :reserved WHERE order_id = :orderId AND ingredient = :ingredient")
+        jdbc.sql("""
+                        UPDATE reservation_line
+                        SET reserved = :reserved, consumed = :consumed
+                        WHERE order_id = :orderId AND ingredient = :ingredient
+                        """)
                 .param("reserved", line.reserved())
+                .param("consumed", line.consumed())
                 .param("orderId", line.orderId())
                 .param("ingredient", line.ingredient().id())
                 .update();

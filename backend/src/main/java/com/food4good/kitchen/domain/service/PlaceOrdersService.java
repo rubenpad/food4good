@@ -1,6 +1,7 @@
 package com.food4good.kitchen.domain.service;
 
 import com.food4good.kitchen.domain.model.InvalidOrderRequestException;
+import com.food4good.kitchen.domain.model.KitchenSettings;
 import com.food4good.kitchen.domain.model.NewOrder;
 import com.food4good.kitchen.domain.model.PlacedOrders;
 import com.food4good.kitchen.domain.model.Recipe;
@@ -24,16 +25,19 @@ public class PlaceOrdersService implements PlaceOrdersUseCase {
     private final OrderRepositoryPort orders;
     private final RequestIngredientsUseCase requestIngredients;
     private final TransactionPort transactions;
+    private final KitchenSettings settings;
 
     public PlaceOrdersService(
             RecipeRepositoryPort recipes,
             OrderRepositoryPort orders,
             RequestIngredientsUseCase requestIngredients,
-            TransactionPort transactions) {
+            TransactionPort transactions,
+            KitchenSettings settings) {
         this.recipes = recipes;
         this.orders = orders;
         this.requestIngredients = requestIngredients;
         this.transactions = transactions;
+        this.settings = settings;
     }
 
     @Override
@@ -43,7 +47,8 @@ public class PlaceOrdersService implements PlaceOrdersUseCase {
         }
         var available = recipes.findAll();
         var accepted = IntStream.range(0, quantity)
-                .mapToObj(i -> new NewOrder(UUID.randomUUID(), drawFrom(available)))
+                .mapToObj(i -> drawFrom(available))
+                .map(recipe -> new NewOrder(UUID.randomUUID(), recipe, settings.scaled(recipe.preparationTime())))
                 .toList();
 
         transactions.inTransaction(() -> {

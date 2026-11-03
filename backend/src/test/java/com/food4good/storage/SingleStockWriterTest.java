@@ -50,6 +50,7 @@ class SingleStockWriterTest {
         var instance = new SpringApplicationBuilder(Food4GoodApplication.class).run(
                 "--server.port=0",
                 "--spring.flyway.placeholders.initial_stock=" + PLENTY,
+                "--food4good.kitchen.cooks=0",
                 "--spring.datasource.url=" + postgres.getJdbcUrl(),
                 "--spring.datasource.username=" + postgres.getUsername(),
                 "--spring.datasource.password=" + postgres.getPassword());
