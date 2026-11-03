@@ -32,6 +32,7 @@ export interface PlacedOrders {
   requested: number;
   accepted: number;
   orderIds: string[];
+  estimatedWaitSeconds: number;
 }
 
 const PAGE_SIZE = 20;

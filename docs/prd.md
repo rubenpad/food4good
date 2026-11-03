@@ -87,10 +87,10 @@ A single page with these panels. The spec's required UI elements are noted in br
 | Panel | Shows |
 |---|---|
 | **Place Orders** | Quantity input, capacity estimate (FR-2), result of the last request (FR-1.4) |
-| **Kitchen** [orders in preparation] | Orders waiting for ingredients, ready and preparing, with Recipe and status; Cooks busy/total; current Backlog |
+| **Kitchen** [orders in preparation] | Orders waiting for ingredients, ready and preparing, with Recipe and status; Cooks busy/total; current Backlog; Maximum wait |
 | **Food Storage** [stock + Purchase history] | Per Ingredient: on hand, reserved, available. Purchase history: Ingredient, units, time |
 | **Order history** [orders placed] | Every Order with Recipe, status and timestamps, newest first, paginated |
-| **Recipes** [recipes with ingredients] | Each Recipe with its Ingredients, quantities and preparation time; forms to create and edit Recipes (FR-8); Cooks and Maximum wait |
+| **Recipes** [recipes with ingredients] | Each Recipe with its Ingredients, quantities and preparation time; forms to create and edit Recipes (FR-8) |
 
 - **FR-7.1** Status, stock and Purchase changes appear within about a second without a page refresh.
 - **FR-7.2** After a lost connection, the dashboard reconnects and catches up automatically.

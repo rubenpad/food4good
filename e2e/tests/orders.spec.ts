@@ -15,7 +15,7 @@ test.beforeEach(async ({ page }) => {
 test("places the default single Order and shows it in the history", async ({ page }) => {
   await panel(page, "Place Orders").getByRole("button", { name: "Place Orders" }).click();
 
-  await expect(panel(page, "Place Orders").getByText("Accepted 1 of 1")).toBeVisible();
+  await expect(panel(page, "Place Orders").getByText(/Accepted 1 of 1\./)).toBeVisible();
   await expect(history(page).locator("tbody tr").first()).toContainText(
     /Waiting for ingredients|Ready|Preparing|Delivered/,
   );
@@ -35,7 +35,7 @@ test("buys what Food Storage lacks, and shows the Purchases without a reload", a
 test("Orders that needed buying still get delivered", async ({ page }) => {
   await panel(page, "Place Orders").getByLabel("Quantity").fill("10");
   await panel(page, "Place Orders").getByRole("button", { name: "Place Orders" }).click();
-  await expect(panel(page, "Place Orders").getByText("Accepted 10 of 10")).toBeVisible();
+  await expect(panel(page, "Place Orders").getByText(/Accepted 10 of 10\./)).toBeVisible();
 
   await expect(panel(page, "Kitchen").getByRole("heading", { name: "Waiting for ingredients (0)" })).toBeVisible({
     timeout: 120_000,
@@ -54,7 +54,7 @@ test("shows the API's error for an invalid quantity", async ({ page }) => {
 test("pages through the history and filters it by status", async ({ page }) => {
   await panel(page, "Place Orders").getByLabel("Quantity").fill("25");
   await panel(page, "Place Orders").getByRole("button", { name: "Place Orders" }).click();
-  await expect(panel(page, "Place Orders").getByText("Accepted 25 of 25")).toBeVisible();
+  await expect(panel(page, "Place Orders").getByText(/Accepted 25 of 25\./)).toBeVisible();
 
   await expect(history(page).locator("tbody tr")).toHaveCount(20);
   await history(page).getByRole("button", { name: "Older" }).click();
@@ -77,6 +77,24 @@ test("the Kitchen shows its Cooks working and Orders in each status", async ({ p
     timeout: 60_000,
   });
   await expect(kitchen.getByRole("region", { name: "Ready" })).toBeVisible();
+});
+
+test("shows a read-only Backlog and Maximum wait, and a live estimate of what fits", async ({ page }) => {
+  await expect(panel(page, "Kitchen").getByText(/Backlog: .+ \(estimated\) · Maximum wait: 5 min/)).toBeVisible();
+  await expect(panel(page, "Place Orders").getByText(/Estimate: about \d+ more Orders fit right now/)).toBeVisible();
+});
+
+test("accepts what fits, says so, then says when the Kitchen is full", async ({ page }) => {
+  await panel(page, "Place Orders").getByLabel("Quantity").fill("9000");
+  await panel(page, "Place Orders").getByRole("button", { name: "Place Orders" }).click();
+  await expect(panel(page, "Place Orders").getByText(/Accepted \d+ of 9000\. The rest would go past/)).toBeVisible();
+
+  await panel(page, "Place Orders").getByLabel("Quantity").fill("9000");
+  await panel(page, "Place Orders").getByRole("button", { name: "Place Orders" }).click();
+  await expect(panel(page, "Place Orders").getByText(/The Kitchen is full: accepted 0 of 9000/)).toBeVisible();
+  await expect(panel(page, "Place Orders").getByText("Estimate: about 0 more Orders fit right now")).toBeVisible({
+    timeout: 10_000,
+  });
 });
 
 test("every panel fits a phone screen", async ({ page }) => {

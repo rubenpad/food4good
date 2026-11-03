@@ -33,7 +33,7 @@ class KitchenConfiguration {
 
     @Bean
     KitchenSettings kitchenSettings(KitchenProperties properties) {
-        return new KitchenSettings(properties.cooks(), properties.preparationTimeScale());
+        return new KitchenSettings(properties.cooks(), properties.maxWait(), properties.preparationTimeScale());
     }
 
     @Bean
@@ -71,8 +71,9 @@ class KitchenConfiguration {
     }
 
     @Bean
-    GetKitchenStatusUseCase getKitchenStatusUseCase(OrderRepositoryPort orders, KitchenSettings settings) {
-        return new GetKitchenStatusService(orders, settings);
+    GetKitchenStatusUseCase getKitchenStatusUseCase(
+            OrderRepositoryPort orders, RecipeRepositoryPort recipes, KitchenSettings settings) {
+        return new GetKitchenStatusService(orders, recipes, settings);
     }
 
     @Bean

@@ -22,6 +22,7 @@ spring:
 food4good:
   kitchen:
     cooks: ${FOOD4GOOD_KITCHEN_COOKS:4}
+    max-wait: ${FOOD4GOOD_KITCHEN_MAX_WAIT:2h}
     preparation-time-scale: ${FOOD4GOOD_KITCHEN_PREPARATION_TIME_SCALE:1.0}
   market:
     url: ${FOOD4GOOD_MARKET_URL:http://localhost:8089}

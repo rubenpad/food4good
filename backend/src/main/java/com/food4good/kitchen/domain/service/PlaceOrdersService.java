@@ -11,10 +11,10 @@ import com.food4good.kitchen.domain.ports.out.RecipeRepositoryPort;
 import com.food4good.shared.domain.ports.out.TransactionPort;
 import com.food4good.storage.domain.ports.in.IngredientRequest;
 import com.food4good.storage.domain.ports.in.RequestIngredientsUseCase;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.stream.IntStream;
 
 public class PlaceOrdersService implements PlaceOrdersUseCase {
 
@@ -46,18 +46,31 @@ public class PlaceOrdersService implements PlaceOrdersUseCase {
             throw new InvalidOrderRequestException("Quantity must be between 1 and %d".formatted(MAX_QUANTITY));
         }
         var available = recipes.findAll();
-        var accepted = IntStream.range(0, quantity)
-                .mapToObj(i -> drawFrom(available))
-                .map(recipe -> new NewOrder(UUID.randomUUID(), recipe, settings.scaled(recipe.preparationTime())))
-                .toList();
 
-        transactions.inTransaction(() -> {
-            orders.insertAll(accepted);
-            requestIngredients.request(accepted.stream()
-                    .map(order -> new IngredientRequest(order.id(), order.recipe().ingredients()))
-                    .toList());
+        return transactions.inTransaction(() -> {
+            // The lock comes first, so the Backlog read next includes every request admitted before this one.
+            orders.lockAdmission();
+            var work = orders.backlogWork();
+            var accepted = new ArrayList<NewOrder>();
+            while (accepted.size() < quantity) {
+                var recipe = drawFrom(available);
+                var preparationTime = settings.scaled(recipe.preparationTime());
+                var after = work.plus(preparationTime);
+                if (after.compareTo(settings.capacity()) > 0) {
+                    break;
+                }
+                work = after;
+                accepted.add(new NewOrder(UUID.randomUUID(), recipe, preparationTime));
+            }
+            if (!accepted.isEmpty()) {
+                orders.insertAll(accepted);
+                requestIngredients.request(accepted.stream()
+                        .map(order -> new IngredientRequest(order.id(), order.recipe().ingredients()))
+                        .toList());
+            }
+            return new PlacedOrders(
+                    quantity, accepted.stream().map(NewOrder::id).toList(), settings.timeToClear(work));
         });
-        return new PlacedOrders(quantity, accepted.stream().map(NewOrder::id).toList());
     }
 
     private static Recipe drawFrom(List<Recipe> recipes) {

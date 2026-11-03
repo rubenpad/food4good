@@ -3,7 +3,14 @@ package com.food4good.kitchen.infrastructure.adapters.in.rest.dto;
 import com.food4good.kitchen.domain.model.KitchenStatus;
 
 public record KitchenResponse(
-        int cooks, int busyCooks, int ordersWaitingForIngredients, int ordersReady, int ordersPreparing) {
+        int cooks,
+        int busyCooks,
+        int ordersWaitingForIngredients,
+        int ordersReady,
+        int ordersPreparing,
+        long maxWaitSeconds,
+        long backlogSeconds,
+        int estimatedCapacity) {
 
     public static KitchenResponse from(KitchenStatus status) {
         return new KitchenResponse(
@@ -11,6 +18,9 @@ public record KitchenResponse(
                 status.busyCooks(),
                 status.waitingForIngredients(),
                 status.ready(),
-                status.preparing());
+                status.preparing(),
+                status.maxWait().toSeconds(),
+                status.backlog().plusMillis(999).toSeconds(),
+                status.estimatedCapacity());
     }
 }

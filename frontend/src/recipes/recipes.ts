@@ -49,10 +49,3 @@ export function useSaveRecipe() {
     onSettled: () => queryCache.invalidateQueries({ key: RECIPES_KEY }),
   });
 }
-
-export function formatDuration(seconds: number): string {
-  const minutes = Math.floor(seconds / 60);
-  const rest = seconds % 60;
-  if (minutes === 0) return `${rest} s`;
-  return rest === 0 ? `${minutes} min` : `${minutes} min ${rest} s`;
-}

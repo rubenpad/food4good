@@ -46,6 +46,28 @@ class OrderRepositoryAdapter implements OrderRepositoryPort {
     }
 
     @Override
+    public void lockAdmission() {
+        jdbc.sql("SELECT pg_advisory_xact_lock(4004010)").query().listOfRows();
+    }
+
+    @Override
+    public Duration backlogWork() {
+        // clock_timestamp, not now: now is when the transaction began, which may be before it got the lock.
+        var millis = jdbc.sql("""
+                        SELECT coalesce(sum(CASE
+                            WHEN status = 'PREPARING'
+                                THEN greatest(0, ceil(extract(epoch FROM prepare_until - clock_timestamp()) * 1000))
+                            ELSE preparation_ms
+                        END), 0)::bigint
+                        FROM orders
+                        WHERE status <> 'DELIVERED'
+                        """)
+                .query(Long.class)
+                .single();
+        return Duration.ofMillis(millis);
+    }
+
+    @Override
     public List<Order> find(OrderQuery query) {
         var sql = new StringBuilder("""
                 SELECT id, recipe_id, recipe_name, preparation_ms, status,
