@@ -14,7 +14,6 @@ import java.util.Map;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
@@ -24,7 +23,6 @@ import org.springframework.test.context.TestPropertySource;
     "food4good.kitchen.cooks=3",
     "food4good.kitchen.preparation-time-scale=0.01",
 })
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class BuyingToDeliveryApiTest extends ApiTest {
 
     @RegisterExtension

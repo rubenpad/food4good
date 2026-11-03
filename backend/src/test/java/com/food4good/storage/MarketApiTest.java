@@ -26,7 +26,6 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
@@ -36,7 +35,6 @@ import org.springframework.test.context.TestPropertySource;
     "food4good.kitchen.cooks=0",
     "food4good.market.read-timeout=300ms",
 })
-@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
 class MarketApiTest extends ApiTest {
 
     private static final String BUY = "/api/farmers-market/buy";

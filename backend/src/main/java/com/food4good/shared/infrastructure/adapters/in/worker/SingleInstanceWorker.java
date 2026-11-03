@@ -3,6 +3,8 @@ package com.food4good.shared.infrastructure.adapters.in.worker;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 import org.postgresql.PGConnection;
 import org.slf4j.Logger;
@@ -25,6 +27,7 @@ public abstract class SingleInstanceWorker implements SmartLifecycle {
     private final String channel;
 
     private volatile boolean running;
+    private volatile CountDownLatch stopping;
     private Thread thread;
 
     protected SingleInstanceWorker(DataSource dataSource, String role, long lockKey, String channel) {
@@ -40,12 +43,15 @@ public abstract class SingleInstanceWorker implements SmartLifecycle {
     @Override
     public void start() {
         running = true;
+        stopping = new CountDownLatch(1);
         thread = Thread.ofVirtual().name(role).start(this::run);
     }
 
     @Override
     public void stop() {
         running = false;
+        stopping.countDown();
+        wakeListener();
         try {
             thread.join(Duration.ofSeconds(5));
         } catch (InterruptedException e) {
@@ -56,6 +62,16 @@ public abstract class SingleInstanceWorker implements SmartLifecycle {
     @Override
     public boolean isRunning() {
         return running;
+    }
+
+    /** So a worker waiting on a notification notices the stop now rather than at its next poll. */
+    private void wakeListener() {
+        try (var connection = dataSource.getConnection();
+                var statement = connection.createStatement()) {
+            statement.execute("NOTIFY " + channel);
+        } catch (SQLException e) {
+            log.debug("Could not wake the {}; it will notice at its next poll", role, e);
+        }
     }
 
     private void run() {
@@ -104,7 +120,7 @@ public abstract class SingleInstanceWorker implements SmartLifecycle {
 
     private void pause() {
         try {
-            Thread.sleep(POLL);
+            stopping.await(POLL.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             running = false;

@@ -9,7 +9,6 @@ import java.util.Map;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.TestPropertySource;
 
 /** One Cook and a tiny Maximum wait: room frees up as Dishes are delivered. */
@@ -19,7 +18,6 @@ import org.springframework.test.context.TestPropertySource;
     "food4good.kitchen.preparation-time-scale=0.01",
     "spring.flyway.placeholders.initial_stock=1000",
 })
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class KitchenCapacityRecoveryApiTest extends ApiTest {
 
     private int accepted(int quantity) {
