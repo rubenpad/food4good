@@ -38,4 +38,11 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    // Every test class has its own database and app, so classes can run side by side.
+    maxParallelForks = (project.findProperty("testForks") as String?)?.toInt()
+        ?: (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 4)
+    // Tests are short-lived, so the JVM's heaviest compiler costs more CPU than it ever pays back.
+    jvmArgs("-XX:TieredStopAtLevel=1")
+    // e.g. -Djunit.jupiter.testmethod.order.default=org.junit.jupiter.api.MethodOrderer\$Random
+    systemProperties(System.getProperties().filterKeys { it.toString().startsWith("junit.") }.mapKeys { it.key.toString() })
 }

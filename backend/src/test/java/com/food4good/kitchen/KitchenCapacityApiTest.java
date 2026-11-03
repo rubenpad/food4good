@@ -14,12 +14,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.TestPropertySource;
 
 /** No Cooks, so nothing cooks and the Backlog holds still. Zero Cooks count as one for capacity. */
 @TestPropertySource(properties = {"food4good.kitchen.cooks=0", "food4good.kitchen.max-wait=10m"})
-@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
 class KitchenCapacityApiTest extends ApiTest {
 
     private ResponseEntity<String> place(int quantity) {

@@ -350,6 +350,8 @@ Each batch carries a monotonic `id`. A client that reconnects refetches all quer
 | Stock invariants | `GET /api/storage` after each step: on hand ≥ 0, reserved ≥ 0, reserved ≤ on hand |
 | Concurrency | N concurrent `POST /api/orders`, then check invariants and that the count of distinct Orders equals the sum of `accepted` |
 
+**Keeping it fast.** Each test class shares one app and one in-memory PostgreSQL, and classes run in parallel. Before each test, `ApiTest` stops the workers (which waits for market calls in progress) and rebuilds the database with Flyway, so every test starts from what a new database has. Tests that need their own instances, such as the two-instance tests, keep their own stack. To run a single fork: `./gradlew test -PtestForks=1`.
+
 Three checks sit outside that seam:
 
 | Check | What |

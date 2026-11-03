@@ -12,7 +12,6 @@ import java.util.Map;
 import java.util.TreeMap;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.TestPropertySource;
 
 /** Two Cooks, with preparation times scaled down so 100 s of cooking takes 1 s. */
@@ -21,7 +20,6 @@ import org.springframework.test.context.TestPropertySource;
     "food4good.kitchen.preparation-time-scale=0.01",
     "spring.flyway.placeholders.initial_stock=1000",
 })
-@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
 class CookingApiTest extends ApiTest {
 
     private static final Duration PATIENCE = Duration.ofSeconds(30);

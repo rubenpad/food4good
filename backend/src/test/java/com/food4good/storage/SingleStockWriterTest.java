@@ -3,6 +3,7 @@ package com.food4good.storage;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.food4good.Food4GoodApplication;
+import com.food4good.TestcontainersConfiguration;
 import com.jayway.jsonpath.JsonPath;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -23,7 +24,6 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
 import org.testcontainers.postgresql.PostgreSQLContainer;
-import org.testcontainers.utility.DockerImageName;
 
 /** Two app instances on one database, driven through their APIs and observed through their logs. */
 @ExtendWith(OutputCaptureExtension.class)
@@ -32,7 +32,7 @@ class SingleStockWriterTest {
     private static final String BECAME_WRITER = "This instance is now the stock writer";
     private static final int PLENTY = 1_000;
 
-    private final PostgreSQLContainer postgres = new PostgreSQLContainer(DockerImageName.parse("postgres:17-alpine"));
+    private final PostgreSQLContainer postgres = TestcontainersConfiguration.newPostgres();
     private final List<ConfigurableApplicationContext> instances = new ArrayList<>();
 
     @BeforeEach

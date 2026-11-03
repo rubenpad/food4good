@@ -14,7 +14,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
@@ -23,7 +22,6 @@ import org.springframework.test.context.TestPropertySource;
     "food4good.kitchen.cooks=0",
     "food4good.market.max-concurrent-calls=3",
 })
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class MarketConcurrencyApiTest extends ApiTest {
 
     private static final AtomicInteger calls = new AtomicInteger();

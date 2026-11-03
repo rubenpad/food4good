@@ -2,10 +2,17 @@ package com.food4good;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.food4good.shared.infrastructure.adapters.in.rest.LiveChannel;
+import com.food4good.shared.infrastructure.adapters.in.worker.SingleInstanceWorker;
 import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
+import com.zaxxer.hikari.HikariDataSource;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
@@ -13,18 +20,52 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.web.client.RestClient;
 
 /**
  * Base for behaviour tests: the whole app against real PostgreSQL, driven and observed only
  * through the public HTTP API. Tests control behaviour through configuration, never test hooks.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "spring.flyway.clean-disabled=false")
 @Import(TestcontainersConfiguration.class)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class ApiTest {
 
     @LocalServerPort
     private int port;
+
+    @Autowired
+    private List<SingleInstanceWorker> workers;
+
+    @Autowired
+    private List<LiveChannel> liveChannels;
+
+    @Autowired
+    private Flyway flyway;
+
+    @Autowired
+    private HikariDataSource dataSource;
+
+    /**
+     * Gives every test what a new database has, without the cost of a new container and app. The
+     * workers stop first, which also waits for market calls in progress, so nothing from the last
+     * test can land in this one.
+     */
+    @BeforeEach
+    void startFromANewDatabase() {
+        try (var stopping = Executors.newVirtualThreadPerTaskExecutor()) {
+            workers.forEach(worker -> stopping.execute(worker::stop));
+        }
+        flyway.clean();
+        flyway.migrate();
+        // Pooled connections hold prepared statements for the tables that were just replaced.
+        dataSource.getHikariPoolMXBean().softEvictConnections();
+        liveChannels.forEach(LiveChannel::discard);
+        workers.forEach(SingleInstanceWorker::start);
+    }
 
     protected RestClient api() {
         return RestClient.create("http://localhost:" + port + "/api");
@@ -87,7 +128,7 @@ public abstract class ApiTest {
 
     /**
      * Edits every Recipe to need the same Ingredients and take the same time, so the random draw
-     * doesn't matter. Edits the shared database, so the test class needs {@code @DirtiesContext}.
+     * doesn't matter.
      */
     protected void givenEveryRecipeIs(Map<String, Integer> ingredients, int preparationTimeSeconds) {
         var items = ingredients.entrySet().stream()

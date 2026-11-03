@@ -55,7 +55,9 @@ class MarketBuyerWorker extends SingleInstanceWorker {
     public void stop() {
         super.stop();
         try {
-            callSlots.tryAcquire(maxCalls, 5, TimeUnit.SECONDS);
+            if (callSlots.tryAcquire(maxCalls, 5, TimeUnit.SECONDS)) {
+                callSlots.release(maxCalls);
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

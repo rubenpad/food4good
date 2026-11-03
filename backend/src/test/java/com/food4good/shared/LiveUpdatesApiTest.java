@@ -15,7 +15,6 @@ import java.util.UUID;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.TestPropertySource;
 
 /** Two Cooks, and cooking fast enough to watch Orders go all the way through. */
@@ -25,7 +24,6 @@ import org.springframework.test.context.TestPropertySource;
     "food4good.kitchen.max-wait=1000h",
     "spring.flyway.placeholders.initial_stock=100000",
 })
-@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
 class LiveUpdatesApiTest extends ApiTest {
 
     private static final Duration PATIENCE = Duration.ofSeconds(30);

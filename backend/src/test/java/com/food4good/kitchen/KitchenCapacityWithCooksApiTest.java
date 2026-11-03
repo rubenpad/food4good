@@ -9,7 +9,6 @@ import java.util.Map;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.TestPropertySource;
 
 /** Real Cooks, at real speed: the Backlog falls while they work. */
@@ -18,7 +17,6 @@ import org.springframework.test.context.TestPropertySource;
     "food4good.kitchen.max-wait=10m",
     "spring.flyway.placeholders.initial_stock=1000",
 })
-@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
 class KitchenCapacityWithCooksApiTest extends ApiTest {
 
     private int kitchen(String field) {
