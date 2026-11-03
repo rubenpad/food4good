@@ -10,9 +10,8 @@ services:
   backend:
     ports: !reset []
     environment:
-      # Plenty of stock until buying exists, and cooking fast enough to watch Orders finish.
-      FOOD4GOOD_STORAGE_INITIAL_STOCK: "100000"
-      FOOD4GOOD_KITCHEN_PREPARATION_TIME_SCALE: "0.02"
+      # Cooking fast enough to watch Orders finish. Stock stays low, so Orders buy from the market.
+      FOOD4GOOD_KITCHEN_PREPARATION_TIME_SCALE: "0.05"
 
   gateway:
     ports: !reset []

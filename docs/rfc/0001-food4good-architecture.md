@@ -74,7 +74,7 @@ Cross-module calls are **synchronous and run inside the caller's transaction**. 
 
 `domain` is plain Java, so services get their transactions through `TransactionPort` in `shared`.
 
-The stock writer and the Kitchen scheduler share `SingleInstanceWorker` in `shared`: an advisory lock on one dedicated connection, waking on `NOTIFY` with a 1 s poll as backup. Each holds a connection, so the pool is 12: the default 10 plus these two. Setting `FOOD4GOOD_KITCHEN_COOKS=0` stops Orders at ready, which tests use to observe Reservations before stock is consumed.
+The stock writer, the Kitchen scheduler and the market buyer share `SingleInstanceWorker` in `shared`: an advisory lock on one dedicated connection, waking on `NOTIFY` with a 1 s poll as backup. Each holds a connection, so the pool is 13: the default 10 plus these three. Setting `FOOD4GOOD_KITCHEN_COOKS=0` stops Orders at ready, which tests use to observe Reservations before stock is consumed.
 
 | Inbound port | Offered by | Used by | Effect |
 |---|---|---|---|
@@ -221,11 +221,13 @@ The **storage worker** is one virtual thread holding a session-level `pg_try_adv
 
 Each command is a few row updates, so even a 1,000-Order burst (1,000 `RESERVE`s) drains in seconds.
 
-### 5.3 Buy from the Farmers Market (buyer workers)
+### 5.3 Buy from the Farmers Market (market buyer)
+
+One market buyer runs across all instances (`SingleInstanceWorker`), which makes the limit on concurrent calls a limit for the whole system. It hands each due job to its own virtual thread.
 
 ```mermaid
 sequenceDiagram
-  participant B as storage: buyer worker
+  participant B as storage: market buyer
   participant DB
   participant FM as Farmers Market
   B->>DB: claim due jobs: UPDATE … SET status='IN_FLIGHT', lease_until=now()+lease<br/>WHERE id IN (SELECT … WHERE status='PENDING' AND next_attempt_at<=now()<br/>ORDER BY next_attempt_at FOR UPDATE SKIP LOCKED LIMIT free_slots)
@@ -278,7 +280,7 @@ All endpoints are under `/api`. JSON uses camelCase. The OpenAPI document is gen
 | `GET /orders?status=&cursor=&limit=` | Order history, newest first, keyset-paginated on `(accepted_at, id)`: `{items, nextCursor}`. `limit` is 1–200, default 50. `nextCursor` is null on the last page. |
 | `GET /kitchen` | `{cooks, busyCooks, ordersWaitingForIngredients, ordersReady, ordersPreparing, maxWaitSeconds, backlogSeconds, estimatedCapacity}` |
 | `GET /storage` | `[{ingredient, onHand, reserved, available}]` |
-| `GET /purchases?cursor=&limit=` | Purchase history, newest first |
+| `GET /purchases?cursor=&limit=` | Purchase history, newest first: `{items, nextCursor}`. `limit` is 1–200, default 50. |
 | `GET /recipes` | Recipes with id, Ingredients, quantities and preparation times, ordered by name |
 | `POST /recipes` | Creates a Recipe: `201` with its location. `400` if invalid, `409` if the name is taken. |
 | `PUT /recipes/{id}` | Replaces a Recipe's name, Ingredients and preparation time. `400`, `404`, `409`. |
@@ -368,7 +370,7 @@ frontend/           Vue + Vite app
 infra/
   docker-compose.yml   postgres, wiremock, backend, frontend, gateway
   nginx.conf           gateway routes: /api/ to the backend, everything else to the frontend
-  wiremock/mappings/   buy.json — quantitySold {{randomInt lower=0 upper=10}}, uniform delay 0–3 s
+  wiremock/mappings/   buy.json — quantitySold random 0–10, uniform delay 0–3 s
 e2e/                Playwright dashboard tests and their throwaway Compose stack
 load-tests/         k6 scripts
 docs/  prd.md · rfc/ · adr/

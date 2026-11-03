@@ -3,7 +3,9 @@ import { expect, test, type Page } from "@playwright/test";
 const panel = (page: Page, name: string) => page.getByRole("region", { name });
 const history = (page: Page) => panel(page, "Order history");
 const stockRow = (page: Page, ingredient: string) =>
-  panel(page, "Food Storage").locator("tbody tr", { hasText: ingredient });
+  panel(page, "Food Storage").getByRole("table").first().locator("tbody tr", { hasText: ingredient });
+
+test.setTimeout(240_000);
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
@@ -19,14 +21,27 @@ test("places the default single Order and shows it in the history", async ({ pag
   );
 });
 
-test("Food Storage shows the ingredients Cooks used, without a reload", async ({ page }) => {
-  const onHandBefore = await totalOnHand(page);
-
-  await panel(page, "Place Orders").getByLabel("Quantity").fill("3");
+test("buys what Food Storage lacks, and shows the Purchases without a reload", async ({ page }) => {
+  await panel(page, "Place Orders").getByLabel("Quantity").fill("10");
   await panel(page, "Place Orders").getByRole("button", { name: "Place Orders" }).click();
 
-  await expect(panel(page, "Place Orders").getByText("Accepted 3 of 3")).toBeVisible();
-  await expect.poll(() => totalOnHand(page), { timeout: 60_000 }).toBeLessThan(onHandBefore);
+  const purchases = panel(page, "Purchase history").locator("tbody tr");
+  await expect(purchases.first()).toContainText(/tomato|lemon|potato|rice|ketchup|lettuce|onion|cheese|meat|chicken/, {
+    timeout: 30_000,
+  });
+  await expect(purchases.first().locator("td").nth(1)).toHaveText(/^[1-9][0-9]*$/);
+});
+
+test("Orders that needed buying still get delivered", async ({ page }) => {
+  await panel(page, "Place Orders").getByLabel("Quantity").fill("10");
+  await panel(page, "Place Orders").getByRole("button", { name: "Place Orders" }).click();
+  await expect(panel(page, "Place Orders").getByText("Accepted 10 of 10")).toBeVisible();
+
+  await expect(panel(page, "Kitchen").getByRole("heading", { name: "Waiting for ingredients (0)" })).toBeVisible({
+    timeout: 120_000,
+  });
+  await expect(panel(page, "Kitchen").getByRole("heading", { name: "Ready (0)" })).toBeVisible({ timeout: 180_000 });
+  await expect(panel(page, "Kitchen").getByRole("heading", { name: "Preparing (0)" })).toBeVisible({ timeout: 60_000 });
 });
 
 test("shows the API's error for an invalid quantity", async ({ page }) => {
@@ -49,7 +64,7 @@ test("pages through the history and filters it by status", async ({ page }) => {
 
   await history(page).getByRole("combobox", { name: "Filter by status" }).click();
   await page.getByRole("option", { name: "Delivered" }).click();
-  await expect(history(page).locator("tbody tr").first()).toContainText("Delivered", { timeout: 60_000 });
+  await expect(history(page).locator("tbody tr").first()).toContainText("Delivered", { timeout: 120_000 });
 });
 
 test("the Kitchen shows its Cooks working and Orders in each status", async ({ page }) => {
@@ -57,8 +72,10 @@ test("the Kitchen shows its Cooks working and Orders in each status", async ({ p
   await panel(page, "Place Orders").getByRole("button", { name: "Place Orders" }).click();
 
   const kitchen = panel(page, "Kitchen");
-  await expect(kitchen.getByText("Cooks busy: 4 of 4")).toBeVisible({ timeout: 30_000 });
-  await expect(kitchen.getByRole("region", { name: "Preparing" }).getByRole("listitem")).toHaveCount(4);
+  await expect(kitchen.getByText(/Cooks busy: [1-4] of 4/)).toBeVisible({ timeout: 60_000 });
+  await expect(kitchen.getByRole("region", { name: "Preparing" }).getByRole("listitem").first()).toBeVisible({
+    timeout: 60_000,
+  });
   await expect(kitchen.getByRole("region", { name: "Ready" })).toBeVisible();
 });
 
@@ -70,9 +87,3 @@ test("every panel fits a phone screen", async ({ page }) => {
   }));
   expect(scrollWidth).toBeLessThanOrEqual(innerWidth);
 });
-
-async function totalOnHand(page: Page) {
-  const cells = panel(page, "Food Storage").locator("tbody tr td:nth-child(2)");
-  const values = await cells.allInnerTexts();
-  return values.reduce((sum, value) => sum + Number(value), 0);
-}

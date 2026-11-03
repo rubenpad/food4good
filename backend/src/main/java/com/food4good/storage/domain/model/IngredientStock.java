@@ -13,6 +13,11 @@ public record IngredientStock(Ingredient ingredient, int onHand, int reserved) {
         return new IngredientStock(ingredient, onHand, reserved + units);
     }
 
+    /** Adds bought units to what is on hand. They count as available until reserved. */
+    public IngredientStock receive(int units) {
+        return new IngredientStock(ingredient, onHand + units, reserved);
+    }
+
     /** Takes reserved units out of Food Storage. */
     public IngredientStock consume(int units) {
         return new IngredientStock(ingredient, onHand - units, reserved - units);

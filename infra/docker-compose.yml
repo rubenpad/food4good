@@ -17,6 +17,13 @@ services:
       timeout: 3s
       retries: 30
 
+  # Simulates the Farmers Market. Point FOOD4GOOD_MARKET_URL elsewhere to use a real one.
+  wiremock:
+    image: wiremock/wiremock:3.13.2
+    command: ["--disable-banner"]
+    volumes:
+      - ./wiremock:/home/wiremock:ro
+
   backend:
     build: ../backend
     environment:
@@ -26,11 +33,17 @@ services:
       FOOD4GOOD_KITCHEN_COOKS: ${FOOD4GOOD_KITCHEN_COOKS:-4}
       FOOD4GOOD_KITCHEN_PREPARATION_TIME_SCALE: ${FOOD4GOOD_KITCHEN_PREPARATION_TIME_SCALE:-1.0}
       FOOD4GOOD_STORAGE_INITIAL_STOCK: ${FOOD4GOOD_STORAGE_INITIAL_STOCK:-5}
+      FOOD4GOOD_MARKET_URL: ${FOOD4GOOD_MARKET_URL:-http://wiremock:8080}
+      FOOD4GOOD_MARKET_CONNECT_TIMEOUT: ${FOOD4GOOD_MARKET_CONNECT_TIMEOUT:-1s}
+      FOOD4GOOD_MARKET_READ_TIMEOUT: ${FOOD4GOOD_MARKET_READ_TIMEOUT:-2s}
+      FOOD4GOOD_MARKET_MAX_CONCURRENT_CALLS: ${FOOD4GOOD_MARKET_MAX_CONCURRENT_CALLS:-20}
     ports:
       - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      wiremock:
+        condition: service_started
 
   frontend:
     build: ../frontend

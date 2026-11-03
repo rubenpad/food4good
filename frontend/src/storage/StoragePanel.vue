@@ -4,6 +4,7 @@ import Column from "primevue/column";
 import DataTable from "primevue/datatable";
 import Message from "primevue/message";
 import { usePolling } from "../usePolling";
+import PurchaseHistory from "./PurchaseHistory.vue";
 import { useStock } from "./storage";
 
 const { data: stock, error, refetch } = useStock();
@@ -22,6 +23,7 @@ usePolling(refetch);
           <Column field="reserved" header="Reserved" />
           <Column field="available" header="Available" />
         </DataTable>
+        <PurchaseHistory />
       </template>
     </Card>
   </section>
