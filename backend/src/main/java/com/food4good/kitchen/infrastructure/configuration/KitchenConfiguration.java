@@ -1,6 +1,7 @@
 package com.food4good.kitchen.infrastructure.configuration;
 
 import com.food4good.kitchen.domain.model.KitchenSettings;
+import com.food4good.kitchen.domain.ports.in.AdmitOrdersUseCase;
 import com.food4good.kitchen.domain.ports.in.CookOrdersUseCase;
 import com.food4good.kitchen.domain.ports.in.CreateRecipeUseCase;
 import com.food4good.kitchen.domain.ports.in.GetKitchenStatusUseCase;
@@ -9,9 +10,11 @@ import com.food4good.kitchen.domain.ports.in.ListRecipesUseCase;
 import com.food4good.kitchen.domain.ports.in.MarkOrderReadyUseCase;
 import com.food4good.kitchen.domain.ports.in.PlaceOrdersUseCase;
 import com.food4good.kitchen.domain.ports.in.UpdateRecipeUseCase;
+import com.food4good.kitchen.domain.ports.out.AdmissionQueuePort;
 import com.food4good.kitchen.domain.ports.out.OrderChangesPort;
 import com.food4good.kitchen.domain.ports.out.OrderRepositoryPort;
 import com.food4good.kitchen.domain.ports.out.RecipeRepositoryPort;
+import com.food4good.kitchen.domain.service.AdmitOrdersService;
 import com.food4good.kitchen.domain.service.CookOrdersService;
 import com.food4good.kitchen.domain.service.CreateRecipeService;
 import com.food4good.kitchen.domain.service.GetKitchenStatusService;
@@ -53,14 +56,19 @@ class KitchenConfiguration {
     }
 
     @Bean
-    PlaceOrdersUseCase placeOrdersUseCase(
+    PlaceOrdersUseCase placeOrdersUseCase(AdmissionQueuePort admissionQueue) {
+        return new PlaceOrdersService(admissionQueue);
+    }
+
+    @Bean
+    AdmitOrdersUseCase admitOrdersUseCase(
             RecipeRepositoryPort recipes,
             OrderRepositoryPort orders,
             RequestIngredientsUseCase requestIngredients,
             TransactionPort transactions,
             OrderChangesPort orderChanges,
             KitchenSettings settings) {
-        return new PlaceOrdersService(recipes, orders, requestIngredients, transactions, orderChanges, settings);
+        return new AdmitOrdersService(recipes, orders, requestIngredients, transactions, orderChanges, settings);
     }
 
     @Bean

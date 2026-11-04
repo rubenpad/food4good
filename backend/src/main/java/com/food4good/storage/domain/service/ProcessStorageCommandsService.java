@@ -5,6 +5,7 @@ import com.food4good.shared.domain.ports.out.TransactionPort;
 import com.food4good.storage.domain.model.MarketShortfall;
 import com.food4good.storage.domain.model.ReservationLine;
 import com.food4good.storage.domain.model.StorageCommand;
+import com.food4good.storage.domain.ports.in.IngredientRequest;
 import com.food4good.storage.domain.ports.in.ProcessStorageCommandsUseCase;
 import com.food4good.storage.domain.ports.out.MarketJobRepositoryPort;
 import com.food4good.storage.domain.ports.out.PurchaseRepositoryPort;
@@ -62,6 +63,7 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
         try {
             transactions.inTransaction(() -> {
                 switch (command) {
+                    case StorageCommand.RequestIngredients request -> recordRequests(request);
                     case StorageCommand.Reserve reserve -> reserve(reserve.orderId());
                     case StorageCommand.Consume consume -> consume(consume.orderId());
                     case StorageCommand.AddPurchase purchase -> addPurchase(purchase);
@@ -73,6 +75,12 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
             log.error("Storage command {} failed", command, e);
             transactions.inTransaction(() -> commands.recordFailure(command.id(), e.toString(), MAX_ATTEMPTS));
         }
+    }
+
+    /** Gives each Order its Reservation lines and its own reservation, so one bad Order can't fail the group. */
+    private void recordRequests(StorageCommand.RequestIngredients command) {
+        reservations.insertLines(command.requests());
+        commands.enqueueReservations(command.requests().stream().map(IngredientRequest::orderId).toList());
     }
 
     private void reserve(UUID orderId) {

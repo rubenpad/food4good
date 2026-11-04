@@ -16,6 +16,9 @@ spring:
     hikari:
       # The default of 10, plus one connection each for the three single-instance workers.
       maximum-pool-size: 13
+      data-source-properties:
+        # Sends a batch as one multi-row INSERT rather than a round trip per row.
+        reWriteBatchedInserts: true
     username: ${DATABASE_USER:food4good}
     password: ${DATABASE_PASSWORD:food4good}
 

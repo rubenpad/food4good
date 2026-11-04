@@ -1,0 +1,35 @@
+# Layered on infra/docker-compose.yml by run.sh: a throwaway stack with no published ports. PostgreSQL
+# stays on disk with syncing on, as in production, because commit cost is part of what's measured.
+services:
+  postgres:
+    ports: !reset []
+
+  backend:
+    ports: !reset []
+    environment:
+      # Plenty of everything: this measures taking Orders, not the Kitchen's limits or the market.
+      FOOD4GOOD_STORAGE_INITIAL_STOCK: ${LOAD_INITIAL_STOCK:-10000000}
+      FOOD4GOOD_KITCHEN_MAX_WAIT: "100000h"
+      FOOD4GOOD_KITCHEN_PREPARATION_TIME_SCALE: "0.001"
+
+  gateway:
+    ports: !reset []
+
+  k6:
+    image: grafana/k6:2.3.0
+    user: ${LOAD_USER:-1000:1000}
+    volumes:
+      - ../load-tests:/load-tests
+    environment:
+      BASE_URL: http://gateway
+      WARMUP_BURSTS: ${WARMUP_BURSTS:-3}
+      P99_TARGET_MS: ${P99_TARGET_MS:-200}
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        k6 run --quiet /load-tests/burst.js; burst=$$?
+        k6 run --quiet /load-tests/verify.js; verify=$$?
+        echo "burst exit=$$burst verify exit=$$verify"
+        [ "$$burst" -eq 0 ] && [ "$$verify" -eq 0 ]
+    depends_on:
+      - gateway

@@ -45,9 +45,8 @@ class StorageConfiguration {
     }
 
     @Bean
-    RequestIngredientsUseCase requestIngredientsUseCase(
-            ReservationRepositoryPort reservations, StorageCommandRepositoryPort commands) {
-        return new RequestIngredientsService(reservations, commands);
+    RequestIngredientsUseCase requestIngredientsUseCase(StorageCommandRepositoryPort commands) {
+        return new RequestIngredientsService(commands);
     }
 
     @Bean

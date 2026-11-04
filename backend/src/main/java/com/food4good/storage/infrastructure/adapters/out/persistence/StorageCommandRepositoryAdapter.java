@@ -3,12 +3,17 @@ package com.food4good.storage.infrastructure.adapters.out.persistence;
 import com.food4good.shared.domain.model.Ingredient;
 import com.food4good.storage.domain.model.MarketJob;
 import com.food4good.storage.domain.model.StorageCommand;
+import com.food4good.storage.domain.ports.in.IngredientRequest;
 import com.food4good.storage.domain.ports.out.StorageCommandRepositoryPort;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 @Repository
@@ -22,6 +27,29 @@ class StorageCommandRepositoryAdapter implements StorageCommandRepositoryPort {
         this.jdbc = jdbc;
         this.batch = batch;
         this.json = json;
+    }
+
+    @Override
+    public void enqueueRequests(List<IngredientRequest> requests) {
+        var payload = requests.stream()
+                .map(request -> Map.of(
+                        "orderId", request.orderId().toString(),
+                        "quantities", quantitiesById(request)))
+                .toList();
+        jdbc.sql("""
+                        INSERT INTO storage_command (type, payload, dedupe_key)
+                        VALUES ('REQUEST_INGREDIENTS', :payload::jsonb, :dedupeKey)
+                        """)
+                .param("payload", json.writeValueAsString(Map.of("requests", payload)))
+                .param("dedupeKey", "REQUEST_INGREDIENTS:" + requests.getFirst().orderId())
+                .update();
+        jdbc.sql("NOTIFY storage_commands").update();
+    }
+
+    private static Map<String, Integer> quantitiesById(IngredientRequest request) {
+        var quantities = new HashMap<String, Integer>();
+        request.quantities().forEach((ingredient, quantity) -> quantities.put(ingredient.id(), quantity));
+        return quantities;
     }
 
     @Override
@@ -105,18 +133,33 @@ class StorageCommandRepositoryAdapter implements StorageCommandRepositoryPort {
 
     private StorageCommand toCommand(long id, String type, String payload) {
         var fields = json.readTree(payload);
-        var orderId = UUID.fromString(fields.get("orderId").asString());
         return switch (type) {
-            case "RESERVE" -> new StorageCommand.Reserve(id, orderId);
-            case "CONSUME" -> new StorageCommand.Consume(id, orderId);
+            case "REQUEST_INGREDIENTS" -> new StorageCommand.RequestIngredients(id, toRequests(fields));
+            case "RESERVE" -> new StorageCommand.Reserve(id, orderId(fields));
+            case "CONSUME" -> new StorageCommand.Consume(id, orderId(fields));
             case "ADD_PURCHASE" -> new StorageCommand.AddPurchase(
                     id,
                     fields.get("marketJobId").asLong(),
                     fields.get("attempt").asInt(),
-                    orderId,
+                    orderId(fields),
                     Ingredient.fromId(fields.get("ingredient").asString()),
                     fields.get("quantity").asInt());
             default -> throw new IllegalStateException("Unknown storage command type " + type);
         };
+    }
+
+    private static UUID orderId(JsonNode fields) {
+        return UUID.fromString(fields.get("orderId").asString());
+    }
+
+    private static List<IngredientRequest> toRequests(JsonNode fields) {
+        var requests = new ArrayList<IngredientRequest>();
+        for (var request : fields.get("requests")) {
+            var quantities = new HashMap<Ingredient, Integer>();
+            request.get("quantities").properties().forEach(
+                    entry -> quantities.put(Ingredient.fromId(entry.getKey()), entry.getValue().asInt()));
+            requests.add(new IngredientRequest(orderId(request), quantities));
+        }
+        return requests;
     }
 }
