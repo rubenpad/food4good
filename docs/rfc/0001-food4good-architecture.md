@@ -109,7 +109,7 @@ CREATE TABLE ingredient_stock (
 
 CREATE TABLE orders (
   id             uuid PRIMARY KEY,
-  recipe_id      uuid        NOT NULL REFERENCES recipe(id),
+  recipe_id      uuid        NOT NULL,          -- no foreign key: too costly per Order, and Recipes can't be deleted
   recipe_name    text        NOT NULL,          -- as accepted; a later edit does not change it
   preparation_ms bigint      NOT NULL,          -- scaled preparation time, frozen at acceptance
   status         text        NOT NULL CHECK (status IN ('WAITING_FOR_INGREDIENTS','READY','PREPARING','DELIVERED')),
@@ -122,7 +122,7 @@ CREATE TABLE orders (
 );
 CREATE INDEX orders_ready_idx     ON orders (ready_at)      WHERE status = 'READY';
 CREATE INDEX orders_preparing_idx ON orders (prepare_until) WHERE status = 'PREPARING';
-CREATE INDEX orders_open_idx      ON orders (status)        WHERE status <> 'DELIVERED';
+CREATE INDEX orders_status_history_idx ON orders (status, accepted_at DESC, id DESC);
 CREATE INDEX orders_history_idx   ON orders (accepted_at DESC, id);
 
 CREATE TABLE reservation_line (
@@ -203,7 +203,7 @@ sequenceDiagram
 + Σ greatest(prepare_until − now, 0) over PREPARING
 ```
 
-which the `orders_open_idx` partial index serves. Capacity is `maxWait × cooks`, and the estimated wait is `backlogWork ÷ cooks`. 
+which `orders_status_history_idx` serves. Capacity is `maxWait × cooks`, and the estimated wait is `backlogWork ÷ cooks`. 
 
 **Requests are admitted in groups.** One worker takes every request that is waiting and admits them together in one transaction, in arrival order, so a burst shares a few commits instead of queueing for one each. This adds no delay: a lone request goes straight through. The lock remains so another instance can't overbook. If the transaction fails, every request in that group gets an error and no Order is created.
 
@@ -336,7 +336,8 @@ Each batch carries a monotonic `id`. A client that reconnects refetches all quer
 
 | Risk | Mitigation |
 |---|---|
-| **NFR-1 is met only some of the time.** Measured with `load-tests/`: warm p99 173, 194 and 211 ms, cold 540 ms, against 200 ms. Before group admission, warm p99 was 1230 ms. | Group admission and small transactions (§5.1). The original idea, a capacity row updated conditionally, would not have helped: the row stays locked until commit, so requests would queue the same way. Remaining time is mostly inserting the Orders themselves. |
+| **NFR-1 holds for warm bursts, not cold ones.** Measured with `load-tests/`: warm p99 122–177 ms over 5 runs, cold 446 ms, against 200 ms. Before group admission, warm p99 was 1230 ms. | Group admission and small transactions (§5.1), and a single-statement Order insert without the Recipe foreign key. A capacity row updated conditionally would not have helped: the row stays locked until commit, so requests would queue the same way. Cold is a just-started JVM, so it only affects the first burst after a restart. |
+| **PgBouncer doesn't fit today.** Considered for burst load. One instance with one admission worker has no shortage of connections, and transaction pooling breaks the session advisory locks and `LISTEN` the workers rely on. | Revisit if several instances make total connections a limit, with workers connecting directly. |
 | **Buying is slow from low stock.** With 5 units each, 891 of 1,000 Orders were still waiting after 5 minutes. Each Order buys separately through at most 20 concurrent calls, and surplus doesn't reach Orders already waiting (§12). | Not fixed. Starting with more stock avoids it, and surplus top-up is the likely fix. |
 | Market non-idempotency: a lost response after a sale. | Accepted gap (PRD §3). Units sold by a call whose response was lost never reach stock. |
 | Waiting Reservations do not benefit from another Order's surplus: an Order short of cheese keeps buying even after surplus cheese lands in stock. | Matches the agreed rule. Possible v2: `ADD_PURCHASE` surplus tops up waiting lines in FIFO order. See §12. |

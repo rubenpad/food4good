@@ -39,18 +39,24 @@ class OrderRepositoryAdapter implements OrderRepositoryPort {
         this.batch = batch;
     }
 
+    /** One statement for all of them, which is much cheaper than a batch when a burst arrives. */
     @Override
     public void insertAll(List<NewOrder> orders) {
-        batch.batchUpdate(
-                "INSERT INTO orders (id, recipe_id, recipe_name, preparation_ms) VALUES (?, ?, ?, ?)",
-                orders.stream()
-                        .map(order -> new Object[] {
-                            order.id(),
-                            order.recipe().id(),
-                            order.recipe().name(),
-                            order.preparationTime().toMillis()
-                        })
-                        .toList());
+        batch.update(connection -> {
+            var statement = connection.prepareStatement("""
+                    INSERT INTO orders (id, recipe_id, recipe_name, preparation_ms)
+                    SELECT * FROM unnest(?::uuid[], ?::uuid[], ?::text[], ?::bigint[])
+                    """);
+            statement.setArray(1, connection.createArrayOf(
+                    "uuid", orders.stream().map(NewOrder::id).toArray()));
+            statement.setArray(2, connection.createArrayOf(
+                    "uuid", orders.stream().map(order -> order.recipe().id()).toArray()));
+            statement.setArray(3, connection.createArrayOf(
+                    "text", orders.stream().map(order -> order.recipe().name()).toArray()));
+            statement.setArray(4, connection.createArrayOf(
+                    "bigint", orders.stream().map(order -> order.preparationTime().toMillis()).toArray()));
+            return statement;
+        });
     }
 
     @Override
@@ -68,7 +74,7 @@ class OrderRepositoryAdapter implements OrderRepositoryPort {
                             ELSE preparation_ms
                         END), 0)::bigint
                         FROM orders
-                        WHERE status <> 'DELIVERED'
+                        WHERE status IN ('WAITING_FOR_INGREDIENTS', 'READY', 'PREPARING')
                         """)
                 .query(Long.class)
                 .single();
@@ -170,7 +176,7 @@ class OrderRepositoryAdapter implements OrderRepositoryPort {
     @Override
     public Map<OrderStatus, Integer> countOpenByStatus() {
         var counts = new EnumMap<OrderStatus, Integer>(OrderStatus.class);
-        jdbc.sql("SELECT status, count(*) AS orders FROM orders WHERE status <> 'DELIVERED' GROUP BY status")
+        jdbc.sql("SELECT status, count(*) AS orders FROM orders WHERE status IN ('WAITING_FOR_INGREDIENTS', 'READY', 'PREPARING') GROUP BY status")
                 .query(row -> {
                     counts.put(OrderStatus.valueOf(row.getString("status")), row.getInt("orders"));
                 });

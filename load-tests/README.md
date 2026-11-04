@@ -28,8 +28,10 @@ The stack also sets a Maximum wait of 100000 h, so nothing is refused, and a pre
 |---|---|---|
 | Before any fix, warm | 1230 ms | Fails |
 | Before any fix, cold | 1976 ms | Fails |
-| Now, warm (3 runs) | 173, 194, 211 ms | 2 of 3 pass |
-| Now, cold | 540 ms | Fails |
+| Now, warm (5 runs) | 177, 130, 122, 124, 142 ms | All pass |
+| Now, cold | 446 ms | Fails |
+
+The exit code uses the measured burst, so `WARMUP_BURSTS=0` fails on purpose today: a just-started JVM is the known limit.
 
 Every run accepted all Orders, with none lost or duplicated, and stock rules held.
 
