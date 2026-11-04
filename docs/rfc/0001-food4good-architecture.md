@@ -78,7 +78,7 @@ The stock writer, the Kitchen scheduler and the market buyer share `SingleInstan
 
 | Inbound port | Offered by | Used by | Effect |
 |---|---|---|---|
-| `RequestIngredientsUseCase.request(requests)` | storage | kitchen | Records the Reservation lines and enqueues `RESERVE` storage commands |
+| `RequestIngredientsUseCase.request(requests)` | storage | kitchen | Enqueues one `REQUEST_INGREDIENTS` storage command holding every request |
 | `ConsumeReservationUseCase.consume(orderId)` | storage | kitchen | Enqueues a `CONSUME` storage command |
 | `MarkOrderReadyUseCase.markReady(orderId)` | kitchen | storage | Order → **ready** (called when a Reservation completes) |
 
@@ -109,7 +109,7 @@ CREATE TABLE ingredient_stock (
 
 CREATE TABLE orders (
   id             uuid PRIMARY KEY,
-  recipe_id      uuid        NOT NULL REFERENCES recipe(id),
+  recipe_id      uuid        NOT NULL,          -- no foreign key: too costly per Order, and Recipes can't be deleted
   recipe_name    text        NOT NULL,          -- as accepted; a later edit does not change it
   preparation_ms bigint      NOT NULL,          -- scaled preparation time, frozen at acceptance
   status         text        NOT NULL CHECK (status IN ('WAITING_FOR_INGREDIENTS','READY','PREPARING','DELIVERED')),
@@ -122,7 +122,7 @@ CREATE TABLE orders (
 );
 CREATE INDEX orders_ready_idx     ON orders (ready_at)      WHERE status = 'READY';
 CREATE INDEX orders_preparing_idx ON orders (prepare_until) WHERE status = 'PREPARING';
-CREATE INDEX orders_open_idx      ON orders (status)        WHERE status <> 'DELIVERED';
+CREATE INDEX orders_status_history_idx ON orders (status, accepted_at DESC, id DESC);
 CREATE INDEX orders_history_idx   ON orders (accepted_at DESC, id);
 
 CREATE TABLE reservation_line (
@@ -146,7 +146,7 @@ CREATE TABLE purchase (
 
 CREATE TABLE storage_command (
   id           bigserial PRIMARY KEY,           -- processing order
-  type         text  NOT NULL CHECK (type IN ('RESERVE','ADD_PURCHASE','CONSUME')),
+  type         text  NOT NULL CHECK (type IN ('REQUEST_INGREDIENTS','RESERVE','ADD_PURCHASE','CONSUME')),
   payload      jsonb NOT NULL,
   dedupe_key   text  NOT NULL UNIQUE,           -- e.g. RESERVE:<orderId>
   status       text  NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','DONE','FAILED')),
@@ -191,7 +191,7 @@ sequenceDiagram
   loop until quantity or capacity reached
     API->>API: draw Recipe uniformly; fits? (backlog + prep ≤ maxWait × cooks)
   end
-  API->>DB: INSERT orders, reservation_line, storage_command(RESERVE) — batched
+  API->>DB: INSERT orders, one storage_command(REQUEST_INGREDIENTS) — batched
   API->>DB: COMMIT (+ NOTIFY storage)
   API-->>UI: {requested, accepted, orderIds, estimatedWait}
 ```
@@ -203,7 +203,11 @@ sequenceDiagram
 + Σ greatest(prepare_until − now, 0) over PREPARING
 ```
 
-which the `orders_open_idx` partial index serves. Capacity is `maxWait × cooks`, and the estimated wait is `backlogWork ÷ cooks`. The transaction holds the lock only for one aggregate query, one batched insert and the commit, a few milliseconds in total. See §10 for the risk this creates under NFR-1.
+which `orders_status_history_idx` serves. Capacity is `maxWait × cooks`, and the estimated wait is `backlogWork ÷ cooks`. 
+
+**Requests are admitted in groups.** One worker takes every request that is waiting and admits them together in one transaction, in arrival order, so a burst shares a few commits instead of queueing for one each. This adds no delay: a lone request goes straight through. The lock remains so another instance can't overbook. If the transaction fails, every request in that group gets an error and no Order is created.
+
+To keep that transaction small, it writes the Orders and **one** storage command holding all their Ingredient Requests. The stock writer expands that command into Reservation lines and one `RESERVE` per Order. The requests are durable from the moment the Orders are, so a crash can't lose them. Reservation lines appearing moments later changes nothing visible, because an Order's Reservation is only ever read by the stock writer.
 
 ### 5.2 Reserve (storage single writer)
 
@@ -215,6 +219,7 @@ The **storage worker** is one virtual thread holding a session-level `pg_try_adv
 
 | Command | Effect (one transaction) |
 |---|---|
+| `REQUEST_INGREDIENTS(requests)` | Inserts the Reservation lines of every Order in the group, and enqueues one `RESERVE` per Order, so one bad Order can't fail the group. |
 | `RESERVE(orderId)` | For each line: `take = min(needed, on_hand − reserved)`; `reserved += take` on stock and line. For every line still short, insert `market_job(remaining = needed − reserved)`. If nothing is short, call `MarkOrderReadyUseCase.markReady`. |
 | `ADD_PURCHASE(jobId, attempt, qty)` | Insert `purchase` (the unique key makes it idempotent). `on_hand += qty`. `give = min(qty, line.needed − line.reserved)`; `reserved += give` on stock and line. Surplus `qty − give` stays available. If every line is full, call `MarkOrderReadyUseCase.markReady`. |
 | `CONSUME(orderId)` | For each line not yet consumed: `on_hand −= reserved`, `stock.reserved −= reserved`, `consumed = true`. |
@@ -331,7 +336,9 @@ Each batch carries a monotonic `id`. A client that reconnects refetches all quer
 
 | Risk | Mitigation |
 |---|---|
-| **Admission lock vs NFR-1.** 100 simultaneous requests queue on one advisory lock. At ~3 ms each, the last waits ~300 ms. | Keep the critical section to one aggregate query and one multi-row insert. Measure with k6. If p99 fails, keep a single `kitchen_capacity` row updated with a conditional `UPDATE … WHERE work + :n <= capacity RETURNING`, which shortens the lock to one row update. A second instance does not help here. |
+| **NFR-1 holds for warm bursts, not cold ones.** Measured with `load-tests/`: warm p99 122–177 ms over 5 runs, cold 446 ms, against 200 ms. Before group admission, warm p99 was 1230 ms. | Group admission and small transactions (§5.1), and a single-statement Order insert without the Recipe foreign key. A capacity row updated conditionally would not have helped: the row stays locked until commit, so requests would queue the same way. Cold is a just-started JVM, so it only affects the first burst after a restart. |
+| **PgBouncer doesn't fit today.** Considered for burst load. One instance with one admission worker has no shortage of connections, and transaction pooling breaks the session advisory locks and `LISTEN` the workers rely on. | Revisit if several instances make total connections a limit, with workers connecting directly. |
+| **Buying is slow from low stock.** With 5 units each, 891 of 1,000 Orders were still waiting after 5 minutes. Each Order buys separately through at most 20 concurrent calls, and surplus doesn't reach Orders already waiting (§12). | Not fixed. Starting with more stock avoids it, and surplus top-up is the likely fix. |
 | Market non-idempotency: a lost response after a sale. | Accepted gap (PRD §3). Units sold by a call whose response was lost never reach stock. |
 | Waiting Reservations do not benefit from another Order's surplus: an Order short of cheese keeps buying even after surplus cheese lands in stock. | Matches the agreed rule. Possible v2: `ADD_PURCHASE` surplus tops up waiting lines in FIFO order. See §12. |
 | Single storage writer is a throughput ceiling. | Each command takes microseconds to milliseconds. Fallback is conditional atomic updates (ADR-0001). |
@@ -358,11 +365,11 @@ Three checks sit outside that seam:
 |---|---|
 | Architecture | ArchUnit: `domain` free of Spring and `infrastructure`; modules reach each other only through `domain/ports/in` or `shared` |
 | Dashboard (Playwright) | A few browser flows that API tests can't see, such as forms showing API errors and phone layout, run by `e2e/run.sh` on a throwaway Compose stack with an in-memory database. Behaviour belongs in API tests; this only covers what the Manager sees. |
-| Load (k6) | 1,000 Orders = 100 concurrent × 10, with `PREP_TIME_SCALE=0.01` and enough capacity. Pass when p99 < 200 ms, every Order exists exactly once, stock invariants hold, and all are **delivered** before a timeout. |
+| Load (k6) | `load-tests/run.sh`, on a real stack with PostgreSQL syncing to disk: 1,000 Orders = 100 concurrent × 10, after warm-up bursts, with a preparation time scale of 0.001 and enough capacity. Pass when p99 < 200 ms, every Order exists exactly once, stock invariants hold, and all are **delivered** before a timeout. |
 
 ## 12. Open questions
 
-1. **Surplus top-up for waiting Reservations** (§10). It is out of scope for v1 unless the demo shows wasteful buying.
+1. **Surplus top-up for waiting Reservations** (§10). The load test now shows wasteful buying, so this is worth deciding.
 
 ## 13. Repository layout
 
