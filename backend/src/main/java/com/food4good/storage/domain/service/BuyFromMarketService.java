@@ -50,6 +50,9 @@ public class BuyFromMarketService implements BuyFromMarketUseCase {
         } catch (RuntimeException e) {
             log.error("Market job {} failed", job, e);
             jobs.recordError(job, e.toString(), MarketBackoff.after(job.zeroStreak() + 1), MAX_ERRORS);
+            if (job.errorAttempts() + 1 >= MAX_ERRORS) {
+                log.error("Market job {} gave up after {} attempts; the reconciler may repair its Order", job, MAX_ERRORS);
+            }
         }
     }
 

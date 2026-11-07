@@ -20,6 +20,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.web.client.RestClient;
 
@@ -49,6 +50,10 @@ public abstract class ApiTest {
     @Autowired
     private HikariDataSource dataSource;
 
+    /** Setup only: for states the API can't produce, such as a defect. Assertions stay on the API. */
+    @Autowired
+    protected JdbcTemplate database;
+
     /**
      * Gives every test what a new database has, without the cost of a new container and app. The
      * workers stop first, which also waits for market calls in progress, so nothing from the last
@@ -69,6 +74,23 @@ public abstract class ApiTest {
 
     protected RestClient api() {
         return RestClient.create("http://localhost:" + port + "/api");
+    }
+
+    /**
+     * Simulates a defect: from now on, writing to {@code table} fails whenever {@code condition} holds
+     * for the new row (SQL using NEW and OLD), until {@link #stopFailing} is called.
+     */
+    protected void failWrites(String table, String operation, String condition) {
+        database.execute("""
+                CREATE OR REPLACE FUNCTION fail_on_purpose() RETURNS trigger AS $$
+                BEGIN RAISE EXCEPTION 'failing on purpose'; END $$ LANGUAGE plpgsql
+                """);
+        database.execute("CREATE TRIGGER fail_on_purpose BEFORE %s ON %s FOR EACH ROW WHEN (%s) EXECUTE FUNCTION fail_on_purpose()"
+                .formatted(operation, table, condition));
+    }
+
+    protected void stopFailing(String table) {
+        database.execute("DROP TRIGGER fail_on_purpose ON " + table);
     }
 
     protected LiveEvents subscribeToEvents() throws Exception {

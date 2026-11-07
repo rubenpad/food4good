@@ -26,7 +26,14 @@ class MarketJobRepositoryAdapter implements MarketJobRepositoryPort {
     @Override
     public void insertAll(List<MarketShortfall> shortfalls) {
         batch.batchUpdate(
-                "INSERT INTO market_job (order_id, ingredient, remaining) VALUES (?, ?, ?)",
+                // A repair can bring back a job that finished or failed; a live job is left alone.
+                """
+                INSERT INTO market_job (order_id, ingredient, remaining) VALUES (?, ?, ?)
+                ON CONFLICT (order_id, ingredient) DO UPDATE
+                SET remaining = EXCLUDED.remaining, status = 'PENDING', zero_streak = 0, error_attempts = 0,
+                    next_attempt_at = now(), lease_until = NULL
+                WHERE market_job.status IN ('DONE', 'FAILED')
+                """,
                 shortfalls.stream()
                         .map(item -> new Object[] {item.orderId(), item.ingredient().id(), item.units()})
                         .toList());
@@ -47,7 +54,7 @@ class MarketJobRepositoryAdapter implements MarketJobRepositoryPort {
                             ORDER BY next_attempt_at
                             LIMIT :limit
                             FOR UPDATE SKIP LOCKED)
-                        RETURNING id, order_id, ingredient, remaining, attempt, zero_streak
+                        RETURNING id, order_id, ingredient, remaining, attempt, zero_streak, error_attempts
                         """)
                 .param("leaseMillis", lease.toMillis())
                 .param("limit", limit)
@@ -57,7 +64,8 @@ class MarketJobRepositoryAdapter implements MarketJobRepositoryPort {
                         Ingredient.fromId(row.getString("ingredient")),
                         row.getInt("remaining"),
                         row.getInt("attempt"),
-                        row.getInt("zero_streak")))
+                        row.getInt("zero_streak"),
+                        row.getInt("error_attempts")))
                 .list();
     }
 

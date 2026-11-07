@@ -226,6 +226,15 @@ The **storage worker** is one virtual thread holding a session-level `pg_try_adv
 
 Each command is a few row updates, so even a 1,000-Order burst (1,000 `RESERVE`s) drains in seconds.
 
+### 5.2b Repair stuck Orders (reconciler)
+
+Between commands, every `FOOD4GOOD_STORAGE_RECONCILE_INTERVAL` (30 s), the stock writer looks for Orders that nothing is working on anymore: waiting for ingredients, short of something, with no pending storage command and no live market job. This only happens after a defect, for example a command or market job that failed 5 times.
+
+- **Repair:** queue the Order's `RESERVE` again. That reserves what's available, including surplus, and brings back its market jobs, even ones that finished or failed. If the Order has no Reservation lines at all, its `REQUEST_INGREDIENTS` is queued again from the command it was accepted with.
+- **No races:** it runs in the stock writer, so it never overlaps a stock change. The market buyer records a sale and its `ADD_PURCHASE` in one transaction, so a job is never between states.
+- **Limit:** 3 repairs per Order, each logged. After that, it's logged once and the Order stays waiting.
+- **Trade-off:** after a failed `ADD_PURCHASE`, the units sold never reached stock. The repair buys them again, and the original sale stays lost.
+
 ### 5.3 Buy from the Farmers Market (market buyer)
 
 One market buyer runs across all instances (`SingleInstanceWorker`), which makes the limit on concurrent calls a limit for the whole system. It hands each due job to its own virtual thread.
@@ -247,7 +256,7 @@ sequenceDiagram
 
 - **Concurrency.** A semaphore of `MAX_CONCURRENT_MARKET_CALLS` (20) limits in-flight calls. Each call runs on its own virtual thread.
 - **No connection or lock is held during the HTTP call.** The job is claimed and committed first, then the call is made, then the result is written in a second transaction.
-- **Crash recovery.** A job left `IN_FLIGHT` past `lease_until` is reclaimed by the next claim query. The sale from the lost call may have happened, which is the accepted gap in the PRD (§3).
+- **Crash recovery.** A job left `IN_FLIGHT` past `lease_until` is reclaimed by the next claim query, which `RestartTest` checks. The sale from the lost call may have happened, which is the accepted gap in the PRD (§3).
 - **Client.** `FarmersMarketPort.buy(ingredient)` is an outbound port of Food Storage. It makes one HTTP call and returns the units sold, 0 on any failure.
 - **Backoff.** `min(250 ms × 2^(zero_streak−1), 5 s)` with ±20 % jitter. A sale resets it.
 - One call is one attempt, because the market accepts no quantity.

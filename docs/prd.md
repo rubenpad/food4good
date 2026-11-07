@@ -140,7 +140,7 @@ All values come from environment variables at startup and are shown read-only in
 
 ## 8. Non-functional requirements
 
-- **NFR-1 Burst intake.** A burst of 1,000 Orders sent as 100 concurrent requests of 10 is acknowledged at **p99 < 200 ms**.
+- **NFR-1 Burst intake.** A burst of 1,000 Orders sent as 100 concurrent requests of 10 is acknowledged at **p99 < 200 ms** once the service is warm. Known limit: the first burst after a restart is slower (446 ms measured).
 - **NFR-2 No loss, no duplicates.** Every accepted Order exists exactly once and reaches **delivered**. A restart at any point loses no Order, Reservation, Purchase or cooking progress.
 - **NFR-3 Stock invariants.** At all times, per Ingredient: on hand ≥ 0, reserved ≥ 0, reserved ≤ on hand. A unit is never in two Reservations.
 - **NFR-4 Market isolation.** A slow or empty Farmers Market delays only the Orders that need what it lacks. It never slows Order intake or the Orders whose ingredients are available.
