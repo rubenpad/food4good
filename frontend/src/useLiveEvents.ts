@@ -1,7 +1,12 @@
 import { onScopeDispose } from "vue";
 import { useQueryCache } from "@pinia/colada";
 import type { Order, OrderPage } from "./orders/orders";
-import type { IngredientStock } from "./storage/storage";
+import {
+  PURCHASE_PAGE_SIZE,
+  type IngredientStock,
+  type Purchase,
+  type PurchasePage,
+} from "./storage/storage";
 
 const RECONNECT_MS = 2_000;
 
@@ -36,12 +41,32 @@ export function useLiveEvents() {
     }
   }
 
+  /** New Purchases only ever reach the first page; older pages never change. */
+  function addPurchases(added: Purchase[]) {
+    const key = ["purchases", "first"];
+    const page = queryCache.getQueryData(key) as PurchasePage | undefined;
+    if (!page) return;
+    const shown = new Set(page.items.map((purchase) => purchase.id));
+    const merged = [
+      ...added.filter((purchase) => !shown.has(purchase.id)).reverse(),
+      ...page.items,
+    ];
+    if (merged.length === page.items.length) return;
+    const items = merged.slice(0, PURCHASE_PAGE_SIZE);
+    const nextCursor =
+      merged.length > PURCHASE_PAGE_SIZE ? String(items.at(-1)!.id) : page.nextCursor;
+    queryCache.setQueryData(key, { items, nextCursor });
+  }
+
   function connect() {
     source = new EventSource("/api/events");
     source.onopen = () => void queryCache.invalidateQueries();
     source.addEventListener("orders", (event) => patchOrders(JSON.parse(event.data) as Order[]));
     source.addEventListener("storage", (event) =>
       queryCache.setQueryData(["storage"], JSON.parse(event.data) as IngredientStock[]),
+    );
+    source.addEventListener("purchases", (event) =>
+      addPurchases(JSON.parse(event.data) as Purchase[]),
     );
     // The browser retries a dropped stream by itself, but gives up on an error response.
     source.onerror = () => {

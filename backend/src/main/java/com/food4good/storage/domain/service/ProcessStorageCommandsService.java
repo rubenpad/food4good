@@ -8,6 +8,7 @@ import com.food4good.storage.domain.model.StorageCommand;
 import com.food4good.storage.domain.ports.in.IngredientRequest;
 import com.food4good.storage.domain.ports.in.ProcessStorageCommandsUseCase;
 import com.food4good.storage.domain.ports.out.MarketJobRepositoryPort;
+import com.food4good.storage.domain.ports.out.PurchaseChangesPort;
 import com.food4good.storage.domain.ports.out.PurchaseRepositoryPort;
 import com.food4good.storage.domain.ports.out.ReservationRepositoryPort;
 import com.food4good.storage.domain.ports.out.StockChangesPort;
@@ -30,6 +31,7 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
     private final PurchaseRepositoryPort purchases;
     private final MarkOrderReadyUseCase markOrderReady;
     private final StockChangesPort stockChanges;
+    private final PurchaseChangesPort purchaseChanges;
     private final TransactionPort transactions;
 
     public ProcessStorageCommandsService(
@@ -40,6 +42,7 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
             PurchaseRepositoryPort purchases,
             MarkOrderReadyUseCase markOrderReady,
             StockChangesPort stockChanges,
+            PurchaseChangesPort purchaseChanges,
             TransactionPort transactions) {
         this.stock = stock;
         this.reservations = reservations;
@@ -48,6 +51,7 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
         this.purchases = purchases;
         this.markOrderReady = markOrderReady;
         this.stockChanges = stockChanges;
+        this.purchaseChanges = purchaseChanges;
         this.transactions = transactions;
     }
 
@@ -100,7 +104,8 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
 
     /** What was bought goes to the Order that needed it first; anything beyond that is available to everyone. */
     private void addPurchase(StorageCommand.AddPurchase purchase) {
-        purchases.insert(purchase.marketJobId(), purchase.attempt(), purchase.ingredient(), purchase.quantity());
+        purchaseChanges.added(purchases.insert(
+                purchase.marketJobId(), purchase.attempt(), purchase.ingredient(), purchase.quantity()));
         var lines = reservations.findLines(purchase.orderId());
         var line = lines.stream()
                 .filter(candidate -> candidate.ingredient() == purchase.ingredient())

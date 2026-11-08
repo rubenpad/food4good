@@ -6,7 +6,11 @@ import java.util.List;
 
 public interface PurchaseRepositoryPort {
 
-    void insert(long marketJobId, int attempt, Ingredient ingredient, int quantity);
+    /** Returns the new Purchase's id. */
+    long insert(long marketJobId, int attempt, Ingredient ingredient, int quantity);
+
+    /** The Purchases with these ids, oldest first. */
+    List<Purchase> findByIds(List<Long> ids);
 
     /** Up to {@code limit} Purchases, newest first, older than {@code before} if it isn't null. */
     List<Purchase> find(Long before, int limit);

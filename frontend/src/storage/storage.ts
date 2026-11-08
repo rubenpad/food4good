@@ -21,7 +21,7 @@ export interface PurchasePage {
   nextCursor: string | null;
 }
 
-const PURCHASE_PAGE_SIZE = 10;
+export const PURCHASE_PAGE_SIZE = 10;
 
 export function usePurchasePage(cursor: Ref<string | null>) {
   return useQuery({

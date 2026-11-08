@@ -58,7 +58,6 @@ export function usePlaceOrders() {
       queryCache.invalidateQueries({ key: ["orders"] });
       queryCache.invalidateQueries({ key: ["storage"] });
       queryCache.invalidateQueries({ key: ["kitchen"] });
-      queryCache.invalidateQueries({ key: ["purchases"] });
     },
   });
 }

@@ -11,6 +11,7 @@ import com.food4good.storage.domain.ports.in.ProcessStorageCommandsUseCase;
 import com.food4good.storage.domain.ports.in.RequestIngredientsUseCase;
 import com.food4good.storage.domain.ports.out.FarmersMarketPort;
 import com.food4good.storage.domain.ports.out.MarketJobRepositoryPort;
+import com.food4good.storage.domain.ports.out.PurchaseChangesPort;
 import com.food4good.storage.domain.ports.out.PurchaseRepositoryPort;
 import com.food4good.storage.domain.ports.out.ReservationRepositoryPort;
 import com.food4good.storage.domain.ports.out.StockChangesPort;
@@ -77,8 +78,9 @@ class StorageConfiguration {
             PurchaseRepositoryPort purchases,
             MarkOrderReadyUseCase markOrderReady,
             StockChangesPort stockChanges,
+            PurchaseChangesPort purchaseChanges,
             TransactionPort transactions) {
         return new ProcessStorageCommandsService(
-                stock, reservations, commands, marketJobs, purchases, markOrderReady, stockChanges, transactions);
+                stock, reservations, commands, marketJobs, purchases, markOrderReady, stockChanges, purchaseChanges, transactions);
     }
 }
