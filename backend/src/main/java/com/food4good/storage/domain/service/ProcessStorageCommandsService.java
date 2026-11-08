@@ -73,7 +73,9 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
             });
         } catch (RuntimeException e) {
             log.error("Storage command {} failed", command, e);
-            transactions.inTransaction(() -> commands.recordFailure(command.id(), e.toString(), MAX_ATTEMPTS));
+            if (transactions.inTransaction(() -> commands.recordFailure(command.id(), e.toString(), MAX_ATTEMPTS))) {
+                log.error("Storage command {} gave up after {} attempts; the reconciler may repair its Order", command, MAX_ATTEMPTS);
+            }
         }
     }
 

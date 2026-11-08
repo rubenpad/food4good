@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -117,18 +118,61 @@ class StorageCommandRepositoryAdapter implements StorageCommandRepositoryPort {
     }
 
     @Override
-    public void recordFailure(long commandId, String error, int maxAttempts) {
-        jdbc.sql("""
+    public boolean recordFailure(long commandId, String error, int maxAttempts) {
+        return jdbc.sql("""
                         UPDATE storage_command
                         SET attempts = attempts + 1,
                             last_error = :error,
                             status = CASE WHEN attempts + 1 >= :maxAttempts THEN 'FAILED' ELSE status END
                         WHERE id = :id
+                        RETURNING status = 'FAILED'
                         """)
                 .param("error", error)
                 .param("maxAttempts", maxAttempts)
                 .param("id", commandId)
-                .update();
+                .query(Boolean.class)
+                .single();
+    }
+
+    @Override
+    public void enqueueRepair(UUID orderId, IngredientRequest requestOrNull, int repair) {
+        var dedupeKey = "REPAIR:%s:%d".formatted(orderId, repair);
+        if (requestOrNull == null) {
+            jdbc.sql("""
+                            INSERT INTO storage_command (type, payload, dedupe_key)
+                            VALUES ('RESERVE', jsonb_build_object('orderId', :orderId::text), :dedupeKey)
+                            """)
+                    .param("orderId", orderId.toString())
+                    .param("dedupeKey", dedupeKey)
+                    .update();
+        } else {
+            jdbc.sql("""
+                            INSERT INTO storage_command (type, payload, dedupe_key)
+                            VALUES ('REQUEST_INGREDIENTS', :payload::jsonb, :dedupeKey)
+                            """)
+                    .param("payload", json.writeValueAsString(Map.of("requests", List.of(Map.of(
+                            "orderId", orderId.toString(), "quantities", quantitiesById(requestOrNull))))))
+                    .param("dedupeKey", dedupeKey)
+                    .update();
+        }
+        jdbc.sql("NOTIFY storage_commands").update();
+    }
+
+    @Override
+    public Optional<IngredientRequest> findRequest(UUID orderId) {
+        return jdbc.sql("""
+                        SELECT payload FROM storage_command
+                        WHERE type = 'REQUEST_INGREDIENTS'
+                          AND payload -> 'requests' @> jsonb_build_array(jsonb_build_object('orderId', :orderId::text))
+                        ORDER BY id
+                        LIMIT 1
+                        """)
+                .param("orderId", orderId.toString())
+                .query(String.class)
+                .optional()
+                .flatMap(payload -> toRequests(json.readTree(payload)).stream()
+                        .filter(request -> request.orderId().equals(orderId))
+                        .findFirst());
     }
 
     private StorageCommand toCommand(long id, String type, String payload) {
