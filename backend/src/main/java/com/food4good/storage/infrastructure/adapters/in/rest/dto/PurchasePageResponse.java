@@ -15,7 +15,7 @@ public record PurchasePageResponse(List<Item> items, String nextCursor) {
 
     public record Item(long id, String ingredient, int quantity, Instant purchasedAt) {
 
-        static Item from(Purchase purchase) {
+        public static Item from(Purchase purchase) {
             return new Item(purchase.id(), purchase.ingredient().id(), purchase.quantity(), purchase.purchasedAt());
         }
     }

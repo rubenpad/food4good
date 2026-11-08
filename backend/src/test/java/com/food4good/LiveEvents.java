@@ -79,6 +79,13 @@ public final class LiveEvents implements AutoCloseable {
         return orders;
     }
 
+    /** Every Purchase this client was told about, in the order it heard of them. */
+    public List<Map<String, Object>> purchases() {
+        var purchases = new ArrayList<Map<String, Object>>();
+        batches("purchases").forEach(batch -> purchases.addAll(JsonPath.<List<Map<String, Object>>>read(batch.data(), "$")));
+        return purchases;
+    }
+
     /** What the latest {@code storage} batch says about one Ingredient, as {@code [onHand, reserved, available]}. */
     public List<Integer> latestStockOf(String ingredient) {
         var all = batches("storage");

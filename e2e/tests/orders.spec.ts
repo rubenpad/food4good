@@ -22,6 +22,13 @@ test("places the default single Order and shows it in the history", async ({ pag
 });
 
 test("buys what Food Storage lacks, and shows the Purchases without a reload", async ({ page }) => {
+  // Lets the live stream connect and its catch-up refetch finish, then counts any polling.
+  await page.waitForTimeout(1_000);
+  let purchaseFetches = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/purchases") purchaseFetches++;
+  });
+
   await panel(page, "Place Orders").getByLabel("Quantity").fill("10");
   await panel(page, "Place Orders").getByRole("button", { name: "Place Orders" }).click();
 
@@ -30,6 +37,9 @@ test("buys what Food Storage lacks, and shows the Purchases without a reload", a
     timeout: 30_000,
   });
   await expect(purchases.first().locator("td").nth(1)).toHaveText(/^[1-9][0-9]*$/);
+  // Polling every 2 s would have fetched at least once by now.
+  await page.waitForTimeout(2_500);
+  expect(purchaseFetches).toBe(0);
 });
 
 test("Orders that needed buying still get delivered", async ({ page }) => {

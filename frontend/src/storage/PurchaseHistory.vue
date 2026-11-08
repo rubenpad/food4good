@@ -4,14 +4,12 @@ import Button from "primevue/button";
 import Column from "primevue/column";
 import DataTable from "primevue/datatable";
 import Message from "primevue/message";
-import { usePolling } from "../usePolling";
 import { usePurchasePage } from "./storage";
 
 const previousCursors = ref<(string | null)[]>([]);
 const cursor = ref<string | null>(null);
 
-const { data: page, error, refetch } = usePurchasePage(cursor);
-usePolling(refetch);
+const { data: page, error } = usePurchasePage(cursor);
 
 const purchases = computed(() => page.value?.items ?? []);
 

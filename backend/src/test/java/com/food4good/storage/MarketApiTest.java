@@ -110,6 +110,21 @@ class MarketApiTest extends ApiTest {
     }
 
     @Test
+    void aClientIsToldAboutEachPurchaseAsItHappens() throws Exception {
+        givenEveryRecipeIs(Map.of("meat", 6), 60);
+        marketAnswers("meat", sold(4));
+
+        try (var events = subscribeToEvents()) {
+            placeOrders(1);
+
+            Awaitility.await().atMost(PATIENCE).untilAsserted(() -> assertThat(events.purchases()).hasSize(1));
+            assertThat(events.purchases()).isEqualTo(purchases());
+            Thread.sleep(600);
+            assertThat(events.batches("purchases")).hasSize(1);
+        }
+    }
+
+    @Test
     void anOrderWithStockNeverCallsTheMarket() throws Exception {
         givenEveryRecipeIs(Map.of("rice", 2), 60);
 

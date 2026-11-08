@@ -3,6 +3,8 @@ package com.food4good.storage.infrastructure.adapters.out.persistence;
 import com.food4good.shared.domain.model.Ingredient;
 import com.food4good.storage.domain.model.Purchase;
 import com.food4good.storage.domain.ports.out.PurchaseRepositoryPort;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -18,16 +20,37 @@ class PurchaseRepositoryAdapter implements PurchaseRepositoryPort {
     }
 
     @Override
-    public void insert(long marketJobId, int attempt, Ingredient ingredient, int quantity) {
-        jdbc.sql("""
+    public long insert(long marketJobId, int attempt, Ingredient ingredient, int quantity) {
+        return jdbc.sql("""
                         INSERT INTO purchase (market_job_id, attempt, ingredient, quantity)
                         VALUES (:marketJobId, :attempt, :ingredient, :quantity)
+                        RETURNING id
                         """)
                 .param("marketJobId", marketJobId)
                 .param("attempt", attempt)
                 .param("ingredient", ingredient.id())
                 .param("quantity", quantity)
-                .update();
+                .query(Long.class)
+                .single();
+    }
+
+    @Override
+    public List<Purchase> findByIds(List<Long> ids) {
+        return jdbc.sql("""
+                        SELECT id, ingredient, quantity, purchased_at FROM purchase
+                        WHERE id = ANY(:ids) ORDER BY id
+                        """)
+                .param("ids", ids.toArray(Long[]::new))
+                .query(PurchaseRepositoryAdapter::toPurchase)
+                .list();
+    }
+
+    private static Purchase toPurchase(ResultSet row, int rowNumber) throws SQLException {
+        return new Purchase(
+                row.getLong("id"),
+                Ingredient.fromId(row.getString("ingredient")),
+                row.getInt("quantity"),
+                row.getObject("purchased_at", OffsetDateTime.class).toInstant());
     }
 
     @Override
@@ -42,11 +65,7 @@ class PurchaseRepositoryAdapter implements PurchaseRepositoryPort {
             statement = statement.param("before", before);
         }
         return statement
-                .query((row, rowNumber) -> new Purchase(
-                        row.getLong("id"),
-                        Ingredient.fromId(row.getString("ingredient")),
-                        row.getInt("quantity"),
-                        row.getObject("purchased_at", OffsetDateTime.class).toInstant()))
+                .query(PurchaseRepositoryAdapter::toPurchase)
                 .list();
     }
 }
