@@ -46,6 +46,10 @@ export function useSaveRecipe() {
       id
         ? sendJson<Recipe>("PUT", `/recipes/${id}`, details)
         : sendJson<Recipe>("POST", "/recipes", details),
-    onSettled: () => queryCache.invalidateQueries({ key: RECIPES_KEY }),
+    onSettled: () => {
+      void queryCache.invalidateQueries({ key: RECIPES_KEY });
+      // The capacity estimate uses the average preparation time, which a Recipe change can move.
+      void queryCache.invalidateQueries({ key: ["kitchen"] });
+    },
   });
 }

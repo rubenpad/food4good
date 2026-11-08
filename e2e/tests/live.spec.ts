@@ -16,18 +16,21 @@ test.beforeEach(async ({ page }) => {
 test("shows changes made elsewhere without polling for them", async ({ page, request }) => {
   const polled: string[] = [];
   page.on("request", (sent) => {
-    if (/\/api\/(storage|orders)/.test(sent.url())) polled.push(sent.url());
+    if (/\/api\/(storage|orders|kitchen)/.test(sent.url())) polled.push(sent.url());
   });
   await page.waitForTimeout(5_000);
   expect(polled).toEqual([]);
 
   const before = await historyRows(page).count();
   const stockBefore = await panel(page, "Food Storage").getByRole("table").first().innerText();
+  const kitchenTotals = panel(page, "Kitchen").getByRole("heading", { level: 3 });
+  const totalsBefore = await kitchenTotals.allInnerTexts();
   await placeOutsideTheDashboard(request, 3);
 
   await expect(historyRows(page)).toHaveCount(before + 3, { timeout: 5_000 });
   await expect(panel(page, "Food Storage").getByRole("table").first()).not.toHaveText(stockBefore, { timeout: 5_000 });
-  expect(polled.filter((url) => url.includes("/api/storage"))).toEqual([]);
+  await expect.poll(() => kitchenTotals.allInnerTexts(), { timeout: 5_000 }).not.toEqual(totalsBefore);
+  expect(polled.filter((url) => /\/api\/(storage|kitchen)/.test(url))).toEqual([]);
 });
 
 test("a status change reaches a row already on screen", async ({ page, request }) => {
