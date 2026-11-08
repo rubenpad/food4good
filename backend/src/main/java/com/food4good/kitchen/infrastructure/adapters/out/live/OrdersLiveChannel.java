@@ -14,21 +14,30 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
-/** Sends the current state of every Order that changed since the last batch. */
+/** Sends the current state of every Order that changed since the last batch, and tells the Kitchen snapshot to refresh. */
 @Component
 class OrdersLiveChannel implements OrderChangesPort, LiveChannel {
 
     private final Set<UUID> changed = ConcurrentHashMap.newKeySet();
     private final OrderRepositoryPort orders;
+    private final KitchenLiveChannel kitchen;
 
-    OrdersLiveChannel(OrderRepositoryPort orders) {
+    OrdersLiveChannel(OrderRepositoryPort orders, KitchenLiveChannel kitchen) {
         this.orders = orders;
+        this.kitchen = kitchen;
     }
 
     @Override
     public void changed(Collection<UUID> orderIds) {
+        if (orderIds.isEmpty()) {
+            // The Kitchen scheduler reports every tick, usually with nothing delivered.
+            return;
+        }
         var ids = List.copyOf(orderIds);
-        AfterCommit.run(() -> changed.addAll(ids));
+        AfterCommit.run(() -> {
+            changed.addAll(ids);
+            kitchen.changed();
+        });
     }
 
     @Override

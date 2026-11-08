@@ -57,7 +57,6 @@ export function usePlaceOrders() {
     onSettled: () => {
       queryCache.invalidateQueries({ key: ["orders"] });
       queryCache.invalidateQueries({ key: ["storage"] });
-      queryCache.invalidateQueries({ key: ["kitchen"] });
     },
   });
 }

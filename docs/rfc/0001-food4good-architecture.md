@@ -306,7 +306,7 @@ Errors are RFC 9457 problem details, with the message for the Manager in `detail
 
 ## 7. Live updates (SSE)
 
-Services announce what changed through `OrderChangesPort` and `StockChangesPort`. Inside a transaction, an announcement only takes effect after commit, so a client never sees a change that rolls back.
+Services announce what changed through `OrderChangesPort`, `StockChangesPort` and `PurchaseChangesPort`. Inside a transaction, an announcement only takes effect after commit, so a client never sees a change that rolls back.
 
 To avoid flooding the browser during a burst, `LiveEventsHub` **coalesces**: every 250 ms it reads the current state of whatever changed and sends one batch per event type. Each client has its own bounded queue and thread, so a slow client is dropped rather than holding up the others; it reconnects and catches up.
 
@@ -315,7 +315,7 @@ To avoid flooding the browser during a burst, `LiveEventsHub` **coalesces**: eve
 | `orders` | `[{id, recipe, status, ...timestamps}]` changed since the last batch |
 | `storage` | full stock snapshot (10 rows) |
 | `purchases` | Purchases created |
-| `kitchen` | `/kitchen` snapshot |
+| `kitchen` | `/kitchen` snapshot, after any Order change, and every second while Orders are preparing (the Backlog shrinks with no event to say so); sent only when it differs from the last one |
 
 Each batch carries a monotonic `id`. A client that reconnects refetches all queries instead of trying to replay, which is simpler and good enough with one instance (PRD FR-7.2).
 
@@ -325,7 +325,7 @@ Each batch carries a monotonic `id`. A client that reconnects refetches all quer
 
 - **Single dashboard** with PrimeVue panels matching PRD FR-7: `DataTable` with virtual scrolling for histories, `Tag` for statuses, `InputNumber` plus `Button` for placing Orders, and `Toast` for request results.
 - **Server state** lives in Pinia Colada: one query per endpoint, with keys `['orders', filters]`, `['storage']`, `['purchases']`, `['kitchen']` and `['recipes']`. `PlaceOrders` is a mutation.
-- **`useLiveEvents()`** opens a single `EventSource`, patches changed rows into the cache with `queryCache.setQueryData`, and invalidates every query on `open`, which covers reconnects. When an Order joins or leaves a page, that page is refetched instead of patched, because its cursor would otherwise skip Orders.
+- **`useLiveEvents()`** opens a single `EventSource`, patches changed rows into the cache with `queryCache.setQueryData`, and invalidates every query on `open`, which covers reconnects. No panel polls. Saving a Recipe refetches `['kitchen']`, since the capacity estimate depends on the average preparation time. When an Order joins or leaves a page, that page is refetched instead of patched, because its cursor would otherwise skip Orders.
 - **Tooling:** oxlint and oxfmt, and `vue-tsc` for type checking.
 - **PrimeVue stays on 4.5.5 with `@primeuix/themes` 2.0.3, pinned exactly.** These are the last MIT releases. PrimeVue 5 and themes 3 use the commercial PrimeUI license and need a license key, so do not upgrade without a licensing decision.
 

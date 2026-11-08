@@ -9,6 +9,7 @@ import com.food4good.shared.domain.ports.out.TransactionPort;
 import com.jayway.jsonpath.JsonPath;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -116,6 +117,49 @@ class LiveUpdatesApiTest extends ApiTest {
     }
 
     @Test
+    void aClientIsToldHowBusyTheKitchenIs() throws Exception {
+        // Dishes of 100 s once scaled, so the two Cooks stay busy and one Order waits.
+        givenEveryRecipeIs(Map.of("rice", 1), 10_000);
+
+        try (var events = subscribeToEvents()) {
+            placeOrders(3);
+
+            Awaitility.await().atMost(PATIENCE).untilAsserted(() -> assertThat(events.kitchens())
+                    .last()
+                    .satisfies(kitchen -> assertThat(kitchen)
+                            .containsEntry("busyCooks", 2)
+                            .containsEntry("ordersPreparing", 2)
+                            .containsEntry("ordersReady", 1)
+                            .containsEntry("ordersWaitingForIngredients", 0)));
+            var latest = events.kitchens().getLast();
+            Map<String, Object> fetched = getJson("/kitchen").read("$");
+            for (var field : List.of("cooks", "maxWaitSeconds", "busyCooks", "ordersReady")) {
+                assertThat(latest.get(field)).as(field).isEqualTo(fetched.get(field));
+            }
+            assertThat((Integer) latest.get("estimatedCapacity")).isPositive();
+        }
+    }
+
+    @Test
+    void theBacklogCountsDownLiveWhileOrdersArePreparing() throws Exception {
+        givenEveryRecipeIs(Map.of("rice", 1), 10_000);
+
+        try (var events = subscribeToEvents()) {
+            placeOrders(1);
+            Awaitility.await().atMost(PATIENCE).until(() -> !events.kitchens().isEmpty()
+                    && events.kitchens().getLast().get("busyCooks").equals(1));
+            var before = events.kitchens().size();
+
+            // Nothing else happens to the Order for 100 s, yet its remaining time keeps shrinking.
+            Awaitility.await().atMost(PATIENCE).until(() -> events.kitchens().size() >= before + 2);
+            var backlogs = events.kitchens().subList(before - 1, events.kitchens().size()).stream()
+                    .map(kitchen -> ((Number) kitchen.get("backlogSeconds")).longValue())
+                    .toList();
+            assertThat(backlogs).isSortedAccordingTo(Comparator.reverseOrder()).doesNotHaveDuplicates();
+        }
+    }
+
+    @Test
     void aBurstArrivesInBatchesAtMostOnePerTypeEveryQuarterSecond() throws Exception {
         givenEveryRecipeIs(Map.of("rice", 1), 100);
 
@@ -128,7 +172,7 @@ class LiveUpdatesApiTest extends ApiTest {
             Awaitility.await().atMost(PATIENCE).untilAsserted(() -> assertThat(
                             events.orders().stream().map(order -> order.get("id")).toList())
                     .containsAll(ids));
-            for (var type : List.of("orders", "storage")) {
+            for (var type : List.of("orders", "storage", "kitchen")) {
                 var batches = events.batches(type);
                 assertThat(batches).hasSizeGreaterThan(1);
                 for (var i = 1; i < batches.size(); i++) {
@@ -206,6 +250,7 @@ class LiveUpdatesApiTest extends ApiTest {
             Thread.sleep(800);
             assertThat(events.batches("orders")).isEmpty();
             assertThat(events.batches("storage")).isEmpty();
+            assertThat(events.batches("kitchen")).isEmpty();
         }
     }
 }

@@ -1,5 +1,6 @@
 import { onScopeDispose } from "vue";
 import { useQueryCache } from "@pinia/colada";
+import type { Kitchen } from "./kitchen/kitchen";
 import type { Order, OrderPage } from "./orders/orders";
 import {
   PURCHASE_PAGE_SIZE,
@@ -64,6 +65,9 @@ export function useLiveEvents() {
     source.addEventListener("orders", (event) => patchOrders(JSON.parse(event.data) as Order[]));
     source.addEventListener("storage", (event) =>
       queryCache.setQueryData(["storage"], JSON.parse(event.data) as IngredientStock[]),
+    );
+    source.addEventListener("kitchen", (event) =>
+      queryCache.setQueryData(["kitchen"], JSON.parse(event.data) as Kitchen),
     );
     source.addEventListener("purchases", (event) =>
       addPurchases(JSON.parse(event.data) as Purchase[]),

@@ -2,12 +2,10 @@
 import Card from "primevue/card";
 import Message from "primevue/message";
 import { formatDuration } from "../formatDuration";
-import { usePolling } from "../usePolling";
 import OrderColumn from "./OrderColumn.vue";
 import { useKitchen } from "./kitchen";
 
-const { data: kitchen, error, refetch } = useKitchen();
-usePolling(refetch);
+const { data: kitchen, error } = useKitchen();
 </script>
 
 <template>
