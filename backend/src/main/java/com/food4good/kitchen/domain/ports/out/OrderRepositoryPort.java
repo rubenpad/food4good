@@ -4,6 +4,7 @@ import com.food4good.kitchen.domain.model.NewOrder;
 import com.food4good.kitchen.domain.model.Order;
 import com.food4good.kitchen.domain.model.OrderQuery;
 import com.food4good.kitchen.domain.model.OrderStatus;
+import com.food4good.kitchen.domain.model.TracedOrder;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
@@ -33,13 +34,13 @@ public interface OrderRepositoryPort {
     /** Moves an Order waiting for ingredients to ready; has no effect in any other status. */
     void markReady(UUID orderId);
 
-    /** Moves every Order whose preparation time has passed to delivered, and returns their ids. */
-    List<UUID> deliverDue();
+    /** Moves every Order whose preparation time has passed to delivered, and returns them. */
+    List<TracedOrder> deliverDue();
 
     int countPreparing();
 
-    /** Moves up to {@code limit} ready Orders to preparing, earliest ready first, and returns their ids. */
-    List<UUID> startPreparing(int limit);
+    /** Moves up to {@code limit} ready Orders to preparing, earliest ready first, and returns them. */
+    List<TracedOrder> startPreparing(int limit);
 
     /** How long until the next Dish is due, if any is cooking. Never negative. */
     Optional<Duration> timeUntilNextDishIsDue();

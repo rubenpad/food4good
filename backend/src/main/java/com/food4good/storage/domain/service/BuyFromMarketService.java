@@ -1,5 +1,6 @@
 package com.food4good.storage.domain.service;
 
+import com.food4good.shared.domain.ports.out.TracingPort;
 import com.food4good.shared.domain.ports.out.TransactionPort;
 import com.food4good.storage.domain.model.MarketBackoff;
 import com.food4good.storage.domain.model.MarketJob;
@@ -9,6 +10,7 @@ import com.food4good.storage.domain.ports.out.MarketJobRepositoryPort;
 import com.food4good.storage.domain.ports.out.StorageCommandRepositoryPort;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,16 +26,19 @@ public class BuyFromMarketService implements BuyFromMarketUseCase {
     private final MarketJobRepositoryPort jobs;
     private final StorageCommandRepositoryPort commands;
     private final TransactionPort transactions;
+    private final TracingPort tracing;
 
     public BuyFromMarketService(
             FarmersMarketPort market,
             MarketJobRepositoryPort jobs,
             StorageCommandRepositoryPort commands,
-            TransactionPort transactions) {
+            TransactionPort transactions,
+            TracingPort tracing) {
         this.market = market;
         this.jobs = jobs;
         this.commands = commands;
         this.transactions = transactions;
+        this.tracing = tracing;
     }
 
     @Override
@@ -43,11 +48,22 @@ public class BuyFromMarketService implements BuyFromMarketUseCase {
 
     @Override
     public void attempt(MarketJob job) {
+        var attributes = Map.of(
+                "order.id", job.orderId(),
+                "ingredient", job.ingredient().id(),
+                "market.attempt", job.attempt(),
+                "market.remaining", job.remaining());
+        tracing.run("BuyFromMarket", job.cause(), attributes, () -> buy(job));
+    }
+
+    private void buy(MarketJob job) {
         try {
             // No connection or lock is held during the call.
             var sold = market.buy(job.ingredient());
+            tracing.tag("market.quantity_sold", sold);
             transactions.inTransaction(() -> record(job, sold));
         } catch (RuntimeException e) {
+            tracing.failed(e);
             log.error("Market job {} failed", job, e);
             jobs.recordError(job, e.toString(), MarketBackoff.after(job.zeroStreak() + 1), MAX_ERRORS);
             if (job.errorAttempts() + 1 >= MAX_ERRORS) {

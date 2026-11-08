@@ -1,6 +1,7 @@
 package com.food4good.storage.domain.service;
 
 import com.food4good.kitchen.domain.ports.in.MarkOrderReadyUseCase;
+import com.food4good.shared.domain.ports.out.TracingPort;
 import com.food4good.shared.domain.ports.out.TransactionPort;
 import com.food4good.storage.domain.model.MarketShortfall;
 import com.food4good.storage.domain.model.ReservationLine;
@@ -14,6 +15,7 @@ import com.food4good.storage.domain.ports.out.ReservationRepositoryPort;
 import com.food4good.storage.domain.ports.out.StockChangesPort;
 import com.food4good.storage.domain.ports.out.StockRepositoryPort;
 import com.food4good.storage.domain.ports.out.StorageCommandRepositoryPort;
+import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +35,7 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
     private final StockChangesPort stockChanges;
     private final PurchaseChangesPort purchaseChanges;
     private final TransactionPort transactions;
+    private final TracingPort tracing;
 
     public ProcessStorageCommandsService(
             StockRepositoryPort stock,
@@ -43,7 +46,8 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
             MarkOrderReadyUseCase markOrderReady,
             StockChangesPort stockChanges,
             PurchaseChangesPort purchaseChanges,
-            TransactionPort transactions) {
+            TransactionPort transactions,
+            TracingPort tracing) {
         this.stock = stock;
         this.reservations = reservations;
         this.commands = commands;
@@ -53,6 +57,7 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
         this.stockChanges = stockChanges;
         this.purchaseChanges = purchaseChanges;
         this.transactions = transactions;
+        this.tracing = tracing;
     }
 
     @Override
@@ -62,8 +67,26 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
         return pending.size();
     }
 
-    /** The command's effect and its "done" mark commit together, so a crash can't apply it twice. */
+    /** Each command in a span of its own, named after the command, e.g. {@code Reserve}. */
     private void process(StorageCommand command) {
+        tracing.run(command.getClass().getSimpleName(), command.cause(), attributesOf(command), () -> apply(command));
+    }
+
+    private static Map<String, Object> attributesOf(StorageCommand command) {
+        return switch (command) {
+            case StorageCommand.RequestIngredients request -> Map.of("admission.orders", request.requests().size());
+            case StorageCommand.Reserve reserve -> Map.of("order.id", reserve.orderId());
+            case StorageCommand.Consume consume -> Map.of("order.id", consume.orderId());
+            case StorageCommand.AddPurchase purchase -> Map.of(
+                    "order.id", purchase.orderId(),
+                    "ingredient", purchase.ingredient().id(),
+                    "market.attempt", purchase.attempt(),
+                    "purchase.quantity", purchase.quantity());
+        };
+    }
+
+    /** The command's effect and its "done" mark commit together, so a crash can't apply it twice. */
+    private void apply(StorageCommand command) {
         try {
             transactions.inTransaction(() -> {
                 switch (command) {
@@ -76,6 +99,7 @@ public class ProcessStorageCommandsService implements ProcessStorageCommandsUseC
                 stockChanges.changed();
             });
         } catch (RuntimeException e) {
+            tracing.failed(e);
             log.error("Storage command {} failed", command, e);
             if (transactions.inTransaction(() -> commands.recordFailure(command.id(), e.toString(), MAX_ATTEMPTS))) {
                 log.error("Storage command {} gave up after {} attempts; the reconciler may repair its Order", command, MAX_ATTEMPTS);

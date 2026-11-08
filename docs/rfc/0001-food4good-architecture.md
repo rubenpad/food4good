@@ -331,15 +331,19 @@ Each batch carries a monotonic `id`. A client that reconnects refetches all quer
 
 ## 9. Observability
 
-- **Setup.** The OTel SDK is configured by Spring Boot, with Micrometer Observation bridged to OTel. OTLP/HTTP goes to `api.honeycomb.io` with the `x-honeycomb-team` header. When `HONEYCOMB_API_KEY` is unset, the exporters are disabled and logs stay local.
-- **Spans.**
-  - One span per use case (`PlaceOrders`, `Reserve`, `AddPurchase`, `Consume`, `StartCooking`, `Deliver`) and one per market call. The market-call span comes from `RestClient` observation.
-  - Attributes: `order.id`, `recipe`, `ingredient`, `market.quantity_sold`, `market.attempt` and `admission.accepted`.
-- **Across async hops.** Every queued row (`orders`, `storage_command`, `market_job`) stores the creating span's W3C `traceparent`. Workers start a new root span with a **span link** to it, and copy `order.id`, so one Order's journey can be queried in Honeycomb without minutes-long open traces.
+- **Setup.** `spring-boot-starter-opentelemetry` configures the OTel SDK, with Micrometer Observation bridged to it, so HTTP and `RestClient` spans share traces with ours. Every trace is kept (sampling probability 1.0), and the span queue holds 32,768 so a burst isn't dropped.
+- **Export.** `HoneycombEnvironmentPostProcessor` turns `HONEYCOMB_API_KEY` into OTLP/HTTP settings: traces and logs to `{HONEYCOMB_ENDPOINT}/v1/traces` and `/v1/logs` with the `x-honeycomb-team` header, metrics to `/v1/metrics` with `x-honeycomb-dataset` too (`HONEYCOMB_METRICS_DATASET`). Without a key nothing is exported. Spring Boot creates no trace or log exporter without an endpoint, and its metrics exporter, on by default, is switched off. Logs reach the SDK through the OpenTelemetry Logback appender, installed only when exporting.
+- **Spans.** The domain records them through `TracingPort` in `shared`, so it stays free of OpenTelemetry.
+  - `PlaceOrders`, a child of the HTTP request, tagged with `admission.requested` and `admission.accepted`.
+  - `AdmitOrders` for each admission group, with one `AcceptOrder` child per Order (`order.id`, `recipe`), linked to the request that asked for it.
+  - `RequestIngredients`, `Reserve`, `AddPurchase` and `Consume`: one per storage command, named after it.
+  - `BuyFromMarket` per market attempt (`order.id`, `ingredient`, `market.attempt`, `market.quantity_sold`), with the `RestClient` call as its child.
+  - `StartCooking` and `Deliver` per Order, and `RepairOrder` per reconciler repair.
+- **Across async hops.** Every queued row (`orders`, `storage_command`, `market_job`) stores the W3C `traceparent` of the span that queued it. A worker starts a new root span with a **span link** to it and tags `order.id`, so one Order's journey can be queried in Honeycomb by `order.id` without minutes-long open traces. Following links, `StartCooking` and `Deliver` lead to the Order's `AcceptOrder`, `Consume` to `StartCooking`, `AddPurchase` to the `BuyFromMarket` that sold, every `BuyFromMarket` to the `Reserve` that found the shortfall, and `Reserve` to its group's `RequestIngredients`.
 - **Metrics.**
-  - Gauges: `kitchen.backlog.seconds`, `kitchen.cooks.busy`, `storage.commands.pending`, `market.jobs.pending`.
-  - Counters: `market.calls{result=sold|zero|error}`, `jobs.failed{queue}`.
-- **Logs** are structured JSON with trace and span IDs.
+  - Gauges, read when metrics are published: `kitchen.backlog.seconds`, `kitchen.cooks.busy`, `storage.commands.pending`, `market.jobs.pending`.
+  - Counters: `market.calls{result=sold|zero|error}`, counted by the market adapter, and `jobs.failed{queue=storage|market}`, counted when work gives up.
+- **Logs** are JSON on the console (Spring Boot's `logstash` format), with `traceId` and `spanId` when logged inside a span.
 
 ## 10. Risks and known gaps
 

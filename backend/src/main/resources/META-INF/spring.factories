@@ -1,0 +1,2 @@
+org.springframework.boot.EnvironmentPostProcessor=\
+com.food4good.shared.infrastructure.configuration.HoneycombEnvironmentPostProcessor

@@ -1,8 +1,10 @@
 package com.food4good.kitchen.infrastructure.adapters.in.worker;
 
+import com.food4good.kitchen.domain.model.AdmissionRequest;
 import com.food4good.kitchen.domain.model.PlacedOrders;
 import com.food4good.kitchen.domain.ports.in.AdmitOrdersUseCase;
 import com.food4good.kitchen.domain.ports.out.AdmissionQueuePort;
+import com.food4good.shared.domain.ports.out.TracingPort;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,17 +32,19 @@ class AdmissionWorker implements AdmissionQueuePort, SmartLifecycle {
     /** Stops after the web server, so requests already being served can finish. */
     private static final int PHASE = SmartLifecycle.DEFAULT_PHASE - 4096;
 
-    private record Waiting(int quantity, CompletableFuture<PlacedOrders> outcome) {
+    private record Waiting(AdmissionRequest request, CompletableFuture<PlacedOrders> outcome) {
     }
 
     private final AdmitOrdersUseCase admitOrders;
+    private final TracingPort tracing;
     private final BlockingQueue<Waiting> queue = new LinkedBlockingQueue<>();
 
     private volatile boolean running;
     private Thread thread;
 
-    AdmissionWorker(AdmitOrdersUseCase admitOrders) {
+    AdmissionWorker(AdmitOrdersUseCase admitOrders, TracingPort tracing) {
         this.admitOrders = admitOrders;
+        this.tracing = tracing;
     }
 
     @Override
@@ -48,7 +52,8 @@ class AdmissionWorker implements AdmissionQueuePort, SmartLifecycle {
         if (!running) {
             throw new IllegalStateException("The Kitchen is shutting down");
         }
-        var waiting = new Waiting(quantity, new CompletableFuture<>());
+        // The request's trace context goes with it, since admission happens on another thread.
+        var waiting = new Waiting(new AdmissionRequest(quantity, tracing.currentContext()), new CompletableFuture<>());
         queue.add(waiting);
         try {
             return waiting.outcome().join();
@@ -104,7 +109,7 @@ class AdmissionWorker implements AdmissionQueuePort, SmartLifecycle {
 
     private void admit(List<Waiting> group) {
         try {
-            var outcomes = admitOrders.admit(group.stream().map(Waiting::quantity).toList());
+            var outcomes = admitOrders.admit(group.stream().map(Waiting::request).toList());
             for (var i = 0; i < group.size(); i++) {
                 group.get(i).outcome().complete(outcomes.get(i));
             }

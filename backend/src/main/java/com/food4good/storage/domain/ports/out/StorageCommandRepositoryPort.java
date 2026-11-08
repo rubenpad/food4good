@@ -21,6 +21,8 @@ public interface StorageCommandRepositoryPort {
     /** Queues adding what a market job bought and wakes the stock writer once the transaction commits. */
     void enqueuePurchase(MarketJob job, int quantity);
 
+    int countPending();
+
     /** The oldest pending commands, in the order they were queued. */
     List<StorageCommand> findPending(int limit);
 

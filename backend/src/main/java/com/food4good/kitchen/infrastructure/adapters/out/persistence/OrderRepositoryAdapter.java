@@ -4,6 +4,7 @@ import com.food4good.kitchen.domain.model.NewOrder;
 import com.food4good.kitchen.domain.model.Order;
 import com.food4good.kitchen.domain.model.OrderQuery;
 import com.food4good.kitchen.domain.model.OrderStatus;
+import com.food4good.kitchen.domain.model.TracedOrder;
 import com.food4good.kitchen.domain.ports.out.OrderRepositoryPort;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -44,8 +45,8 @@ class OrderRepositoryAdapter implements OrderRepositoryPort {
     public void insertAll(List<NewOrder> orders) {
         batch.update(connection -> {
             var statement = connection.prepareStatement("""
-                    INSERT INTO orders (id, recipe_id, recipe_name, preparation_ms)
-                    SELECT * FROM unnest(?::uuid[], ?::uuid[], ?::text[], ?::bigint[])
+                    INSERT INTO orders (id, recipe_id, recipe_name, preparation_ms, traceparent)
+                    SELECT * FROM unnest(?::uuid[], ?::uuid[], ?::text[], ?::bigint[], ?::text[])
                     """);
             statement.setArray(1, connection.createArrayOf(
                     "uuid", orders.stream().map(NewOrder::id).toArray()));
@@ -55,6 +56,8 @@ class OrderRepositoryAdapter implements OrderRepositoryPort {
                     "text", orders.stream().map(order -> order.recipe().name()).toArray()));
             statement.setArray(4, connection.createArrayOf(
                     "bigint", orders.stream().map(order -> order.preparationTime().toMillis()).toArray()));
+            statement.setArray(5, connection.createArrayOf(
+                    "text", orders.stream().map(NewOrder::cause).toArray()));
             return statement;
         });
     }
@@ -122,14 +125,14 @@ class OrderRepositoryAdapter implements OrderRepositoryPort {
     }
 
     @Override
-    public List<UUID> deliverDue() {
+    public List<TracedOrder> deliverDue() {
         return jdbc.sql("""
                         UPDATE orders
                         SET status = 'DELIVERED', delivered_at = now()
                         WHERE status = 'PREPARING' AND prepare_until <= now()
-                        RETURNING id
+                        RETURNING id, traceparent
                         """)
-                .query(UUID.class)
+                .query(OrderRepositoryAdapter::toTracedOrder)
                 .list();
     }
 
@@ -139,7 +142,7 @@ class OrderRepositoryAdapter implements OrderRepositoryPort {
     }
 
     @Override
-    public List<UUID> startPreparing(int limit) {
+    public List<TracedOrder> startPreparing(int limit) {
         return jdbc.sql("""
                         UPDATE orders
                         SET status = 'PREPARING',
@@ -151,11 +154,15 @@ class OrderRepositoryAdapter implements OrderRepositoryPort {
                             ORDER BY ready_at, id
                             LIMIT :limit
                             FOR UPDATE SKIP LOCKED)
-                        RETURNING id
+                        RETURNING id, traceparent
                         """)
                 .param("limit", limit)
-                .query(UUID.class)
+                .query(OrderRepositoryAdapter::toTracedOrder)
                 .list();
+    }
+
+    private static TracedOrder toTracedOrder(ResultSet row, int rowNumber) throws SQLException {
+        return new TracedOrder(row.getObject("id", UUID.class), row.getString("traceparent"));
     }
 
     @Override
