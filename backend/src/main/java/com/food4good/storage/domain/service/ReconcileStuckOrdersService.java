@@ -1,9 +1,11 @@
 package com.food4good.storage.domain.service;
 
+import com.food4good.shared.domain.ports.out.TracingPort;
 import com.food4good.shared.domain.ports.out.TransactionPort;
 import com.food4good.storage.domain.ports.in.ReconcileStuckOrdersUseCase;
 import com.food4good.storage.domain.ports.out.StorageCommandRepositoryPort;
 import com.food4good.storage.domain.ports.out.StuckOrderRepositoryPort;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,13 +28,18 @@ public class ReconcileStuckOrdersService implements ReconcileStuckOrdersUseCase 
     private final StuckOrderRepositoryPort stuckOrders;
     private final StorageCommandRepositoryPort commands;
     private final TransactionPort transactions;
+    private final TracingPort tracing;
     private final Set<UUID> givenUp = ConcurrentHashMap.newKeySet();
 
     public ReconcileStuckOrdersService(
-            StuckOrderRepositoryPort stuckOrders, StorageCommandRepositoryPort commands, TransactionPort transactions) {
+            StuckOrderRepositoryPort stuckOrders,
+            StorageCommandRepositoryPort commands,
+            TransactionPort transactions,
+            TracingPort tracing) {
         this.stuckOrders = stuckOrders;
         this.commands = commands;
         this.transactions = transactions;
+        this.tracing = tracing;
     }
 
     @Override
@@ -53,8 +60,11 @@ public class ReconcileStuckOrdersService implements ReconcileStuckOrdersUseCase 
                 return;
             }
             var repair = stuck.repairs() + 1;
-            log.warn("Repairing Order {} (repair {} of {})", orderId, repair, MAX_REPAIRS);
-            commands.enqueueRepair(orderId, request, repair);
+            // Its own trace: nothing links a repair to the work that went wrong, only the Order's id.
+            tracing.run("RepairOrder", null, Map.of("order.id", orderId, "repair", repair), () -> {
+                log.warn("Repairing Order {} (repair {} of {})", orderId, repair, MAX_REPAIRS);
+                commands.enqueueRepair(orderId, request, repair);
+            });
         }));
     }
 }

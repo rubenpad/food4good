@@ -1,5 +1,6 @@
 package com.food4good.kitchen.domain.ports.in;
 
+import com.food4good.kitchen.domain.model.AdmissionRequest;
 import com.food4good.kitchen.domain.model.PlacedOrders;
 import java.util.List;
 
@@ -9,6 +10,6 @@ import java.util.List;
  */
 public interface AdmitOrdersUseCase {
 
-    /** @return one outcome per requested quantity, in the same order */
-    List<PlacedOrders> admit(List<Integer> quantities);
+    /** @return one outcome per request, in the same order */
+    List<PlacedOrders> admit(List<AdmissionRequest> requests);
 }

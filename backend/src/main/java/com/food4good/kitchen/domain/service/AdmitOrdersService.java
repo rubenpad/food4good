@@ -1,5 +1,6 @@
 package com.food4good.kitchen.domain.service;
 
+import com.food4good.kitchen.domain.model.AdmissionRequest;
 import com.food4good.kitchen.domain.model.KitchenSettings;
 import com.food4good.kitchen.domain.model.NewOrder;
 import com.food4good.kitchen.domain.model.PlacedOrders;
@@ -8,11 +9,13 @@ import com.food4good.kitchen.domain.ports.in.AdmitOrdersUseCase;
 import com.food4good.kitchen.domain.ports.out.OrderChangesPort;
 import com.food4good.kitchen.domain.ports.out.OrderRepositoryPort;
 import com.food4good.kitchen.domain.ports.out.RecipeRepositoryPort;
+import com.food4good.shared.domain.ports.out.TracingPort;
 import com.food4good.shared.domain.ports.out.TransactionPort;
 import com.food4good.storage.domain.ports.in.IngredientRequest;
 import com.food4good.storage.domain.ports.in.RequestIngredientsUseCase;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -24,6 +27,7 @@ public class AdmitOrdersService implements AdmitOrdersUseCase {
     private final TransactionPort transactions;
     private final OrderChangesPort orderChanges;
     private final KitchenSettings settings;
+    private final TracingPort tracing;
 
     public AdmitOrdersService(
             RecipeRepositoryPort recipes,
@@ -31,17 +35,23 @@ public class AdmitOrdersService implements AdmitOrdersUseCase {
             RequestIngredientsUseCase requestIngredients,
             TransactionPort transactions,
             OrderChangesPort orderChanges,
-            KitchenSettings settings) {
+            KitchenSettings settings,
+            TracingPort tracing) {
         this.recipes = recipes;
         this.orders = orders;
         this.requestIngredients = requestIngredients;
         this.transactions = transactions;
         this.orderChanges = orderChanges;
         this.settings = settings;
+        this.tracing = tracing;
     }
 
     @Override
-    public List<PlacedOrders> admit(List<Integer> quantities) {
+    public List<PlacedOrders> admit(List<AdmissionRequest> requests) {
+        return tracing.call("AdmitOrders", null, Map.of("admission.requests", requests.size()), () -> admitAll(requests));
+    }
+
+    private List<PlacedOrders> admitAll(List<AdmissionRequest> requests) {
         var available = recipes.findAll();
 
         return transactions.inTransaction(() -> {
@@ -51,7 +61,8 @@ public class AdmitOrdersService implements AdmitOrdersUseCase {
             var work = orders.backlogWork();
             var accepted = new ArrayList<NewOrder>();
             var outcomes = new ArrayList<PlacedOrders>();
-            for (var quantity : quantities) {
+            for (var request : requests) {
+                var quantity = request.quantity();
                 var ids = new ArrayList<UUID>();
                 while (ids.size() < quantity) {
                     var recipe = drawFrom(available);
@@ -61,7 +72,14 @@ public class AdmitOrdersService implements AdmitOrdersUseCase {
                         break;
                     }
                     work = after;
-                    var order = new NewOrder(UUID.randomUUID(), recipe, preparationTime);
+                    var id = UUID.randomUUID();
+                    // Each Order's own span, linked to the request that asked for it: the start of its journey.
+                    var acceptance = tracing.call(
+                            "AcceptOrder",
+                            request.cause(),
+                            Map.of("order.id", id, "recipe", recipe.name()),
+                            tracing::currentContext);
+                    var order = new NewOrder(id, recipe, preparationTime, acceptance);
                     accepted.add(order);
                     ids.add(order.id());
                 }

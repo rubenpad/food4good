@@ -24,11 +24,15 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-restclient")
+    implementation("org.springframework.boot:spring-boot-starter-opentelemetry")
+    // Bridges Logback to OpenTelemetry, so logs are exported with their trace. Matches the SDK version Boot brings.
+    implementation("io.opentelemetry.instrumentation:opentelemetry-logback-appender-1.0:2.28.0-alpha")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("org.postgresql:postgresql")
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
+    testImplementation("io.opentelemetry:opentelemetry-sdk-testing")
     testImplementation("com.tngtech.archunit:archunit-junit5:1.5.1")
     testImplementation("org.wiremock:wiremock-standalone:3.13.2")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")

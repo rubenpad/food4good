@@ -137,6 +137,8 @@ All values come from environment variables at startup and are shown read-only in
 | Market connect / read timeout | 1 s / 2 s | |
 | Max concurrent market calls | 20 | |
 | Honeycomb API key | unset | Telemetry export off when unset |
+| Honeycomb endpoint | `https://api.honeycomb.io` | e.g. `https://api.eu1.honeycomb.io` for an EU team |
+| Honeycomb metrics dataset | `food4good-metrics` | Traces and logs go to the `food4good` service dataset |
 
 ## 8. Non-functional requirements
 

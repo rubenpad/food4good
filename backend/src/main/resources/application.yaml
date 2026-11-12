@@ -36,7 +36,22 @@ food4good:
     read-timeout: ${FOOD4GOOD_MARKET_READ_TIMEOUT:2s}
     max-concurrent-calls: ${FOOD4GOOD_MARKET_MAX_CONCURRENT_CALLS:20}
 
+logging:
+  structured:
+    format:
+      # One JSON object per line, with traceId and spanId when logged inside a span.
+      console: logstash
+
 management:
+  tracing:
+    sampling:
+      # Every Order's journey, not a sample of them.
+      probability: 1.0
+  opentelemetry:
+    tracing:
+      export:
+        # A burst of 1,000 Orders makes several thousand spans at once; the default 2,048 would drop some.
+        max-queue-size: 32768
   endpoints:
     web:
       exposure:

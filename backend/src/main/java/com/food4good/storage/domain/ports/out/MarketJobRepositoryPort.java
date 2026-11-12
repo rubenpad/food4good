@@ -10,6 +10,9 @@ public interface MarketJobRepositoryPort {
 
     void insertAll(List<MarketShortfall> shortfalls);
 
+    /** Jobs still buying: waiting for their next attempt, or in one. */
+    int countPending();
+
     /** Leases jobs that are due, or whose lease ran out because their call never reported back. */
     List<MarketJob> claimDue(int limit, Duration lease);
 

@@ -23,9 +23,12 @@ import com.food4good.kitchen.domain.service.ListRecipesService;
 import com.food4good.kitchen.domain.service.MarkOrderReadyService;
 import com.food4good.kitchen.domain.service.PlaceOrdersService;
 import com.food4good.kitchen.domain.service.UpdateRecipeService;
+import com.food4good.shared.domain.ports.out.TracingPort;
 import com.food4good.shared.domain.ports.out.TransactionPort;
 import com.food4good.storage.domain.ports.in.ConsumeReservationUseCase;
 import com.food4good.storage.domain.ports.in.RequestIngredientsUseCase;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.binder.MeterBinder;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -56,8 +59,8 @@ class KitchenConfiguration {
     }
 
     @Bean
-    PlaceOrdersUseCase placeOrdersUseCase(AdmissionQueuePort admissionQueue) {
-        return new PlaceOrdersService(admissionQueue);
+    PlaceOrdersUseCase placeOrdersUseCase(AdmissionQueuePort admissionQueue, TracingPort tracing) {
+        return new PlaceOrdersService(admissionQueue, tracing);
     }
 
     @Bean
@@ -67,8 +70,9 @@ class KitchenConfiguration {
             RequestIngredientsUseCase requestIngredients,
             TransactionPort transactions,
             OrderChangesPort orderChanges,
-            KitchenSettings settings) {
-        return new AdmitOrdersService(recipes, orders, requestIngredients, transactions, orderChanges, settings);
+            KitchenSettings settings,
+            TracingPort tracing) {
+        return new AdmitOrdersService(recipes, orders, requestIngredients, transactions, orderChanges, settings, tracing);
     }
 
     @Bean
@@ -77,14 +81,28 @@ class KitchenConfiguration {
             ConsumeReservationUseCase consumeReservation,
             TransactionPort transactions,
             OrderChangesPort orderChanges,
-            KitchenSettings settings) {
-        return new CookOrdersService(orders, consumeReservation, transactions, orderChanges, settings);
+            KitchenSettings settings,
+            TracingPort tracing) {
+        return new CookOrdersService(orders, consumeReservation, transactions, orderChanges, settings, tracing);
     }
 
     @Bean
     GetKitchenStatusUseCase getKitchenStatusUseCase(
             OrderRepositoryPort orders, RecipeRepositoryPort recipes, KitchenSettings settings) {
         return new GetKitchenStatusService(orders, recipes, settings);
+    }
+
+    /** Read when metrics are published, so each reading is the Kitchen at that moment. */
+    @Bean
+    MeterBinder kitchenMetrics(GetKitchenStatusUseCase status) {
+        return registry -> {
+            Gauge.builder("kitchen.backlog.seconds", () -> status.status().backlog().toMillis() / 1000.0)
+                    .description("Estimated time to clear the Backlog")
+                    .register(registry);
+            Gauge.builder("kitchen.cooks.busy", () -> status.status().busyCooks())
+                    .description("Cooks preparing a Dish")
+                    .register(registry);
+        };
     }
 
     @Bean
